@@ -1,0 +1,9 @@
+.env
+.env.*
+*.env
+credentials.*
+.DS_Store
+node_modules/
+__pycache__/
+*.pyc
+.worktrees/

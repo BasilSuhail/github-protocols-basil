@@ -1,0 +1,27 @@
+# Global Git Config Template
+# Copy relevant sections to ~/.gitconfig
+
+[user]
+	name = Basil Suhail
+	email = BasilSuhail@users.noreply.github.com
+
+[init]
+	templateDir = ~/.git-templates
+
+[push]
+	default = current
+	autoSetupRemote = true
+
+[pull]
+	rebase = true
+
+[commit]
+	cleanup = strip
+
+[branch]
+	sort = -committerdate
+
+# GitHub CLI credential helper (install gh first)
+# [credential "https://github.com"]
+# 	helper =
+# 	helper = !/opt/homebrew/bin/gh auth git-credential

@@ -1,0 +1,19 @@
+# Gitleaks Configuration
+# Place at repo root as .gitleaks.toml
+# Inherits 200+ built-in patterns for AWS, GCP, Stripe, OpenAI, etc.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlist"
+
+# Paths to ignore (test fixtures, docs with examples)
+paths = [
+    '''\.gitleaksignore''',
+    '''tests/fixtures/.*''',
+    '''docs/examples/.*''',
+]
+
+# Inline suppression: add #gitleaks:allow to the line
+# File-level suppression: add path to .gitleaksignore

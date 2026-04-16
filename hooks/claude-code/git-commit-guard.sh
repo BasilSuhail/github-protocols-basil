@@ -30,8 +30,9 @@ if echo "$CMD" | grep -qi 'Co-Authored-By'; then
 fi
 
 # === RULE 3: No personal email in commit message ===
-if echo "$CMD" | grep -qi '[PRIVATE_EMAIL]'; then
-  echo "BLOCKED: Personal email detected in commit. Use noreply only."
+# Add any personal emails you want to block to the grep below
+if echo "$CMD" | grep -qiE 'gmail\.com|proton\.me'; then
+  echo "BLOCKED: Personal email pattern detected in commit. Use noreply only."
   exit 2
 fi
 if echo "$CMD" | grep -qi 'noreply@anthropic.com'; then

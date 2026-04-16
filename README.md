@@ -246,3 +246,11 @@ gh pr create --repo BasilSuhail/<repo> --base main --head fix/<slug>
 
 Every task must be completed to 100%. No 80% work. Self-review is mandatory before every push.
 See `rules/completion-standard.md` for the full protocol.
+
+---
+
+## Attribution
+
+This repo is adapted from protocol work created by [@ShaheerKhawaja](https://github.com/ShaheerKhawaja).
+Base system, structure, and original protocol direction came from his `github-protocols` project.
+This Basil version retargets that work for `BasilSuhail/*` workflow, Basil identity, and Basil-specific agent rules.

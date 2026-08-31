@@ -169,6 +169,20 @@ for h in pre-commit commit-msg pre-push; do
 done
 echo ""
 
+echo "Vendored skills:"
+for sk in "$REPO_DIR"/skills/*/; do
+  [ -d "$sk" ] || continue
+  n=$(basename "$sk")
+  d="$HOME/.claude/skills/$n/SKILL.md"
+  if [ ! -f "$d" ]; then bad "skill $n installed"
+  elif cmp -s "$d" "$sk/SKILL.md"; then ok "skill $n installed and current"
+  else bad "skill $n is STALE — re-run install.sh"; fi
+  head -5 "$sk/SKILL.md" | grep -q '^name:' && ok "skill $n has frontmatter" || bad "skill $n has frontmatter"
+done
+grep -q '^Revision:' "$REPO_DIR/NOTICE" 2>/dev/null \
+  && ok "NOTICE records an upstream revision" || bad "NOTICE records an upstream revision"
+echo ""
+
 echo "Global git config:"
 git config --global user.email 2>/dev/null | grep -q noreply.github.com \
   && ok "email is noreply" || bad "email is noreply"

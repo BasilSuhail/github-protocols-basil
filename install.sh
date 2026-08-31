@@ -96,6 +96,25 @@ else
   echo "4. Skipping Claude Code adapter (~/.claude not found)"
 fi
 
+if [ -d "$HOME/.claude" ]; then
+  echo "4b. Skills -> ~/.claude/skills"
+  mkdir -p "$HOME/.claude/skills"
+  for skill in "$SCRIPT_DIR"/skills/*/; do
+    [ -d "$skill" ] || continue
+    name=$(basename "$skill")
+    mkdir -p "$HOME/.claude/skills/$name"
+    cp "$skill"SKILL.md "$HOME/.claude/skills/$name/SKILL.md"
+    echo "   installed skill: $name"
+  done
+fi
+
+if [ -d "$HOME/.cursor" ]; then
+  echo "4c. Cursor rules -> ~/.cursor/rules"
+  mkdir -p "$HOME/.cursor/rules"
+  cp "$SCRIPT_DIR/rules/"*.mdc "$HOME/.cursor/rules/" 2>/dev/null || true
+  echo "   done"
+fi
+
 echo "5. Universal agent rules -> ~/.agents/rules"
 mkdir -p "$HOME/.agents/rules"
 cp "$SCRIPT_DIR/rules/"*.md "$HOME/.agents/rules/"

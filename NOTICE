@@ -1,0 +1,28 @@
+NOTICE
+======
+
+This repository vendors third-party material. Each entry records where the
+copy came from, who wrote it, and the exact upstream revision it was taken at,
+so a divergence can be detected rather than guessed at.
+
+--------------------------------------------------------------------------
+skills/karpathy-guidelines/SKILL.md
+rules/karpathy-guidelines.md
+rules/karpathy-guidelines.mdc
+--------------------------------------------------------------------------
+
+Upstream:  https://github.com/multica-ai/andrej-karpathy-skills
+Author:    forrestchang
+Licence:   MIT (declared in upstream .claude-plugin/plugin.json and in the
+           SKILL.md frontmatter; upstream ships no LICENSE file)
+Revision:  2c606141936f1eeef17fa3043a72095b4765b9c2
+Vendored:  2026-08-31
+
+The guidelines are derived from Andrej Karpathy's public observations on LLM
+coding pitfalls, linked from within the skill itself.
+
+Copies are byte-for-byte. They are not edited to fit this repository's house
+style: a vendored file that quietly diverges from upstream is harder to trust
+than one that is either identical or openly forked. Check for drift with:
+
+    bash scripts/check-vendor-drift.sh

@@ -65,26 +65,55 @@ PROTOCOL_OVERRIDE=ID-102 git push --force-with-lease origin my-branch
 
 Full detail in [GITHUB-RULES.md](GITHUB-RULES.md).
 
+### What Is Running
+
+Every rule is defined once in `lib/rules.sh` and enforced at four places.
+
+| Where | What it checks | Skippable |
+|-------|----------------|-----------|
+| `~/.claude/hooks/pretooluse.sh` | Claude Code commands, before they run | locally |
+| `~/.git-templates/hooks/pre-commit` | staged files | locally |
+| `~/.git-templates/hooks/commit-msg` | the commit message | locally |
+| `~/.git-templates/hooks/pre-push` | what you are about to push | locally |
+| `.github/workflows/protocol.yml` | every push and pull request | no |
+| GitHub ruleset on `main` | pull request required, no force push | no |
+
+### What Is Installed
+
+| Path | Holds |
+|------|-------|
+| `~/.agents/lib/rules.sh` | the rule engine, all 23 rules |
+| `~/.agents/lib/personal-identifiers.sh` | ID-401 term list — untracked, never pushed |
+| `~/.agents/protocol.conf` | name and email — untracked, never pushed |
+| `~/.agents/rules/` | `agent-style` · `code-quality` · `completion-standard` · `git-workflow` · `karpathy-guidelines` |
+| `~/.codex/rules/` | same five, for Codex |
+| `~/.cursor/rules/` | `karpathy-guidelines.mdc`, for Cursor |
+| `~/.claude/skills/` | `karpathy-guidelines` |
+
+Working agreement: one issue, one branch, one pull request. Agents open pull
+requests. You merge.
+
 ---
 
-## 3. Skills
+## 3. Links
 
-`skills.allowlist` says which skills stay in `~/.claude/skills/`. The rest move
-to `~/.claude/skills-archive/` — moved, never deleted. Bring one back with:
+Quick links for everything used here, and who to credit for it.
 
-```bash
-mv ~/.claude/skills-archive/pdf ~/.claude/skills/pdf
-```
+| Skill | Source | Credit |
+|-------|--------|--------|
+| Protocol system | [ShaheerKhawaja](https://github.com/ShaheerKhawaja) | [@ShaheerKhawaja](https://github.com/ShaheerKhawaja) |
+| `karpathy-guidelines` | [multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills) | forrestchang, from Andrej Karpathy's notes — MIT |
+| `xlsx` | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/xlsx) | Anthropic |
+| `docx` | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/docx) | Anthropic |
+| `pptx` | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/pptx) | Anthropic |
+| `pdf` | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/pdf) | Anthropic |
+| `frontend-design` | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/frontend-design) | Anthropic |
+| `humanizer` | [blader/humanizer](https://github.com/blader/humanizer) | blader |
+| `remove-ai-marks` | [haidrrrry/claude-watermark-remover](https://github.com/haidrrrry/claude-watermark-remover/tree/main/skills/remove-claude-marks) | haidrrrry |
+| `clean-user-facing-text` | [haidrrrry/claude-watermark-remover](https://github.com/haidrrrry/claude-watermark-remover/tree/main/skills/clean-user-facing-text) | haidrrrry |
+| Gitleaks | [gitleaks/gitleaks](https://github.com/gitleaks/gitleaks) | Zachary Rice |
+| GitHub CLI | [cli/cli](https://github.com/cli/cli) | GitHub |
+| jq | [jqlang/jq](https://github.com/jqlang/jq) | jq maintainers |
 
-| Skill | In setup now | Source | Credit |
-|-------|--------------|--------|--------|
-| Protocol system | yes | [ShaheerKhawaja/github-protocols](https://github.com/ShaheerKhawaja) | [@ShaheerKhawaja](https://github.com/ShaheerKhawaja) |
-| `karpathy-guidelines` | yes | [multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills) | forrestchang, from Andrej Karpathy's notes — MIT |
-| `xlsx` | archived | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/xlsx) | Anthropic |
-| `docx` | archived | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/docx) | Anthropic |
-| `pptx` | archived | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/pptx) | Anthropic |
-| `pdf` | archived | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/pdf) | Anthropic |
-| `frontend-design` | archived | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/frontend-design) | Anthropic |
-| `humanizer` | archived | [blader/humanizer](https://github.com/blader/humanizer) | blader |
-| `remove-ai-marks` | archived | [haidrrrry/claude-watermark-remover](https://github.com/haidrrrry/claude-watermark-remover/tree/main/skills/remove-claude-marks) | haidrrrry |
-| `clean-user-facing-text` | archived | [haidrrrry/claude-watermark-remover](https://github.com/haidrrrry/claude-watermark-remover/tree/main/skills/clean-user-facing-text) | haidrrrry |
+Skills not in the setup sit in `~/.claude/skills-archive/`. Bring one back with
+`mv ~/.claude/skills-archive/pdf ~/.claude/skills/pdf`.

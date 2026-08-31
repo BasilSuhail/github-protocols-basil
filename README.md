@@ -37,14 +37,14 @@ Identity is read from `~/.agents/protocol.conf`, which is never pushed.
 | ID-001 | Commit address must end in `users.noreply.github.com` |
 | ID-002 | No `Co-Authored-By` line |
 | ID-003 | No AI credited as an author |
-| ID-101 | No `--no-verify` — that flag skips these checks |
+| ID-101 | No `--no-verify` |
 | ID-102 | No force push |
-| ID-103 | No `git add -A` or `git add .` — name the files you mean |
+| ID-103 | No `git add -A` or `git add .` |
 | ID-104 | No `git reset --hard` or `git clean -f` |
 | ID-105 | Only touch repos you own |
 | ID-106 | `gh` commands must say `--repo` |
 | ID-107 | No committing straight to `main` |
-| ID-108 | Agents never merge. You merge |
+| ID-108 | Agents never merge |
 | ID-201 | No API keys, tokens or passwords in committed files |
 | ID-202 | No `.env`, credential or key files |
 | ID-203 | Gitleaks must find nothing |
@@ -57,15 +57,6 @@ Identity is read from `~/.agents/protocol.conf`, which is never pushed.
 | ID-404 | No personal email addresses |
 | ID-405 | No agent session links |
 | ID-406 | Text posted to GitHub is checked before it goes up |
-
-Blocked commands print the rule ID and a `Fix:` line. To waive one rule for one
-command — only works when you type it yourself, never inside an AI session:
-
-```bash
-PROTOCOL_OVERRIDE=ID-102 git push --force-with-lease origin my-branch
-```
-
-Full detail in [GITHUB-RULES.md](GITHUB-RULES.md).
 
 ### Skills
 
@@ -80,15 +71,6 @@ Full detail in [GITHUB-RULES.md](GITHUB-RULES.md).
 | `humanizer` | rewrite AI-sounding prose so it reads naturally |
 | `remove-ai-marks` | strip AI watermarks, invisible Unicode, C2PA metadata |
 | `clean-user-facing-text` | final text hygiene pass on prose for readers |
-
-`karpathy-guidelines` is installed. The rest sit in `~/.claude/skills-archive/`
-until you want them:
-
-```bash
-mv ~/.claude/skills-archive/pdf ~/.claude/skills/pdf
-```
-
-`skills.allowlist` controls which stay installed.
 
 ---
 

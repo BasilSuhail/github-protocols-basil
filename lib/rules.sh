@@ -24,7 +24,10 @@ if [ -f "$PROTOCOL_CONF" ]; then
 fi
 
 PROTOCOL_EMAIL_SUFFIX="${PROTOCOL_EMAIL_SUFFIX:-users.noreply.github.com}"
-PROTOCOL_OWNER="${PROTOCOL_OWNER:-$(git config --get protocol.owner 2>/dev/null)}"
+# `git config --get` exits 1 when the key is unset. Under `set -e` -- which is
+# how GitHub Actions runs every step -- that aborts the shell the moment this
+# file is sourced, taking the whole job down before a single rule runs.
+PROTOCOL_OWNER="${PROTOCOL_OWNER:-$(git config --get protocol.owner 2>/dev/null || true)}"
 PROTOCOL_OVERRIDE_LOG="${PROTOCOL_OVERRIDE_LOG:-$HOME/.agents/override.log}"
 
 # Files that name people on purpose. Attribution is the point of a NOTICE and

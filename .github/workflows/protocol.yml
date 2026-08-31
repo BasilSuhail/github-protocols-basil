@@ -28,6 +28,15 @@ jobs:
           sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
           gitleaks version
 
+      # A runner has no commit identity, so ID-001 blocks every rule that reaches
+      # it -- including the cases asserting a clean command is allowed. Give the
+      # runner the identity the protocol requires rather than exempting it.
+      - name: Configure protocol identity
+        run: |
+          git config --global user.name "${{ github.repository_owner }}"
+          git config --global user.email "${{ github.repository_owner }}@users.noreply.github.com"
+          git config --global protocol.owner "${{ github.repository_owner }}"
+
       - name: Verify rules
         env:
           PROTOCOL_CI: "1"
@@ -86,6 +95,8 @@ jobs:
           fetch-depth: 0
 
       - name: Check every commit in the PR
+        env:
+          PROTOCOL_OWNER: ${{ github.repository_owner }}
         run: |
           set -uo pipefail
           # shellcheck source=/dev/null

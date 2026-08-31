@@ -80,11 +80,36 @@ Install targets:
 - text posted to GitHub is scanned
 
 ### 6. Skills
-- `karpathy-guidelines` — think first, simple, surgical, verify
-- `agent-style` — caveman, 1:1:1, lesstalk
-- `git-workflow` — branch, commit, PR, push rules
-- `completion-standard` — 100% completion rule
-- `code-quality` — test, docs, code hygiene
+
+- **A. `karpathy-guidelines`**
+  - i) think before coding — state assumptions, ask when unclear
+  - ii) simplicity first — minimum code, nothing speculative
+  - iii) surgical changes — touch only what you must
+  - iv) goal-driven — define success, loop until verified
+
+- **B. `agent-style`**
+  - i) caveman — short 3-6 word sentences, max compression
+  - ii) 1:1:1 — 1 issue, 1 branch, 1 PR, 1 commit
+  - iii) lesstalk — tools first, result next, stop
+
+- **C. `git-workflow`**
+  - i) identity from `~/.agents/protocol.conf`
+  - ii) conventional commits, `type(scope): description`
+  - iii) branch naming `feat/<slug>`, `fix/<slug>`, `docs/<slug>`
+  - iv) never merge own PR
+
+- **D. `completion-standard`**
+  - i) done means tests pass, edge cases handled, docs updated
+  - ii) 80% is not done
+  - iii) self-review before every push and PR
+  - iv) 2 hours of review on a 10-minute fix is acceptable
+
+- **E. `code-quality`**
+  - i) one responsibility per function
+  - ii) no hardcoded URLs, model names or credentials
+  - iii) validate at boundaries, trust internal code
+  - iv) no features or refactors beyond what was asked
+  - v) three similar lines beat a premature abstraction
 
 ### 7. Enforcement
 - Layer 1 — global git config

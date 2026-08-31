@@ -9,26 +9,26 @@ Extended with Basil agent rules.
 
 ## 1. Quick Install
 
-```bash
-# 1. Clone this repo
-gh repo clone BasilSuhail/github-protocols-basil ~/github-protocols-basil
+  ```bash
+  # 1. Clone this repo
+  gh repo clone BasilSuhail/github-protocols-basil ~/folders/github-protocols-basil
 
-# 2. Run the installer
-bash ~/github-protocols-basil/install.sh
+  # 2. Run the installer
+  bash ~/folders/github-protocols-basil/install.sh
 
-# 3. Verify
-bash ~/github-protocols-basil/verify.sh
-```
+  # 3. Verify
+  bash ~/folders/github-protocols-basil/verify.sh
+  ```
 
-Then once:
+  Then once:
 
-```bash
-# push hooks into repos you already have
-bash ~/github-protocols-basil/scripts/refresh-repo-hooks.sh --all ~/folders
+  ```bash
+  # push hooks into repos you already have
+  bash ~/folders/github-protocols-basil/scripts/refresh-repo-hooks.sh --all ~/folders
 
-# lock main on GitHub
-bash ~/github-protocols-basil/scripts/apply-github-ruleset.sh
-```
+  # lock main on GitHub
+  bash ~/folders/github-protocols-basil/scripts/apply-github-ruleset.sh
+  ```
 
 Install targets:
 - `~/.agents/lib/rules.sh`

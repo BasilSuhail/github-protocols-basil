@@ -102,7 +102,10 @@ jobs:
           # shellcheck source=/dev/null
           . lib/rules.sh
           fail=0
-          for sha in $(git rev-list ${{ github.event.pull_request.base.sha }}..HEAD); do
+          # --no-merges: skip the synthetic merge commit the runner builds to
+          # test this PR, along with any real merge commits, whose subjects
+          # git writes rather than the author.
+          for sha in $(git rev-list --no-merges ${{ github.event.pull_request.base.sha }}..HEAD); do
             msg=$(git log -1 --format=%B "$sha")
             if ! protocol_check_msg "$msg"; then
               echo "  in commit $(git log -1 --format='%h %s' "$sha")"

@@ -184,14 +184,60 @@ git diff --cached --stat
 - NEVER amend published commits (commits already pushed to remote)
 - If a hook blocks your commit, fix the underlying issue — do not bypass
 
-### What Hooks Enforce
-| Hook | Checks |
-|------|--------|
-| pre-commit | Email verification, PII/secret scanning, Gitleaks, Python linting |
-| pre-push | Force push prevention, upstream protection, email verification |
-| Claude Code commit guard | Co-Authored-By, personal email, --no-verify, conventional format |
-| Claude Code push guard | Force push, upstream protection, --no-verify |
-| Claude Code self-review | Advisory checklist, uncommitted changes, 100% reminder |
+### Enforcement Architecture
+
+Every rule is defined once, in `lib/rules.sh`, with a stable ID. Adapters hold
+no rules of their own — they translate their caller's input format and hand it
+to the engine. A rule therefore cannot be tightened in one layer and forgotten
+in three.
+
+| Adapter | Input contract | Binds |
+|---------|----------------|-------|
+| `hooks/claude-code/pretooluse.sh` | JSON on stdin (`tool_name`, `tool_input.command`) | Claude Code |
+| `hooks/git-templates/pre-commit` | staged file list and content | every tool |
+| `hooks/git-templates/commit-msg` | final message file | every tool |
+| `hooks/git-templates/pre-push` | remote URL, ref updates on stdin | every tool |
+
+Claude Code does **not** set `CLAUDE_TOOL_NAME` or `CLAUDE_TOOL_INPUT`. Any hook
+reading those env vars silently enforces nothing.
+
+Rules judge what a command **invokes**, not text it carries. A pull-request body
+or a test fixture that quotes a prohibited command is documentation, not an
+action. The engine drops heredoc bodies, splits on shell separators and matches
+only real invocation segments, because a guard that fires on prose is a guard
+the author turns off.
+
+### Rule IDs
+
+| ID | Rule |
+|----|------|
+| ID-001 | `user.email` must end in `users.noreply.github.com` |
+| ID-002 | No `Co-Authored-By` trailer |
+| ID-003 | No AI attribution |
+| ID-101 | No `--no-verify` / `--no-gpg-sign` |
+| ID-102 | No force push, no non-fast-forward push |
+| ID-103 | No `git add -A` / `git add .` |
+| ID-104 | No `git reset --hard` / `git clean -f` |
+| ID-105 | Target repo must be owned by `BasilSuhail` |
+| ID-106 | `gh` write commands require `--repo` |
+| ID-107 | No direct commit or push to `main` / `master` |
+| ID-108 | Agents never run `gh pr merge` |
+| ID-201 | No secret patterns in staged content |
+| ID-202 | No `.env`, credential, or key files staged |
+| ID-203 | Gitleaks must pass on the staged diff |
+| ID-301 | Subject must be a Conventional Commit |
+| ID-302 | Subject at most 72 characters |
+| ID-303 | No emoji in commit messages |
+
+Every rule blocks. There are no advisory rules — an agent reads a warning and
+proceeds anyway, which is indistinguishable from having no rule.
+
+### Overrides
+
+`PROTOCOL_OVERRIDE=<rule-id>` waives one rule for one command, and only from a
+human's own shell. It is refused whenever an agent environment marker is
+present, so an agent can never unblock itself. Accepted overrides are logged to
+`~/.agents/override.log`.
 
 ---
 

@@ -1,11 +1,11 @@
 ---
 name: github-rules
-description: Complete GitHub workflow rules for Basil Suhail — feed this file into any agentic coding tool (Claude Code, Codex CLI/app, OpenCode, Cursor, Gemini CLI, Windsurf, Continue.dev) to enforce universal git hygiene
+description: Complete GitHub workflow rules — feed this file into any agentic coding tool (Claude Code, Codex CLI/app, OpenCode, Cursor, Gemini CLI, Windsurf, Continue.dev) to enforce universal git hygiene
 paths: ["**"]
 alwaysApply: true
 ---
 
-# GitHub Rules — Basil Suhail
+# GitHub Rules
 
 > Feed this file into any agentic coding tool as AGENTS.md, CLAUDE.md, .cursorrules, GEMINI.md, or equivalent.
 > All rules are non-negotiable unless explicitly overridden by the user in conversation.
@@ -18,8 +18,8 @@ alwaysApply: true
 
 | Field | Value |
 |-------|-------|
-| Name | `Basil Suhail` |
-| Email | `BasilSuhail@users.noreply.github.com` |
+| Name | from `~/.agents/protocol.conf` |
+| Email | `<handle>@users.noreply.github.com` |
 | GitHub | `BasilSuhail` |
 
 ### Absolute Prohibitions
@@ -35,7 +35,7 @@ Before your first commit in any session or repo, verify:
 ```bash
 git config user.email
 # Must return: *@users.noreply.github.com
-# If not: git config user.email "BasilSuhail@users.noreply.github.com"
+# If not: git config user.email "<handle>@users.noreply.github.com"
 ```
 
 ---

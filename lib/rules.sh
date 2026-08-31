@@ -12,11 +12,30 @@
 #   ID-1xx  safety
 #   ID-2xx  secrets
 #   ID-3xx  commit format
-#   ID-4xx  leak / personal identifiers
+#   ID-4xx  leak / personal identifiers / PII
+
+# Identity lives in an untracked config, not in this file. The handle is
+# unavoidable -- it is the repository URL -- but a real name, a real address and
+# a home directory path are not, and this file is public.
+PROTOCOL_CONF="${PROTOCOL_CONF:-$HOME/.agents/protocol.conf}"
+if [ -f "$PROTOCOL_CONF" ]; then
+  # shellcheck source=/dev/null
+  . "$PROTOCOL_CONF"
+fi
 
 PROTOCOL_EMAIL_SUFFIX="${PROTOCOL_EMAIL_SUFFIX:-users.noreply.github.com}"
-PROTOCOL_OWNER="${PROTOCOL_OWNER:-BasilSuhail}"
+PROTOCOL_OWNER="${PROTOCOL_OWNER:-$(git config --get protocol.owner 2>/dev/null)}"
 PROTOCOL_OVERRIDE_LOG="${PROTOCOL_OVERRIDE_LOG:-$HOME/.agents/override.log}"
+
+# Files that name people on purpose. Attribution is the point of a NOTICE and
+# of a credits section, and a licence that requires attribution cannot be
+# honoured by a repo whose own rules forbid it. Exempt from the identity rules
+# only -- never from the secret rules.
+PROTOCOL_ATTRIBUTION_RE="${PROTOCOL_ATTRIBUTION_RE:-(^|/)(NOTICE|LICENSE|LICENCE|AUTHORS|CREDITS)(\\.[a-z]+)?$}"
+
+_protocol_is_attribution() {
+  printf '%s' "$1" | grep -qE "$PROTOCOL_ATTRIBUTION_RE"
+}
 
 PROTOCOL_VIOLATIONS=0
 
@@ -195,6 +214,11 @@ rule_upstream_protection() { # ID-105
     segs=$(_protocol_invocations "$target" '^(git|gh)[[:space:]]') || return 0
   fi
   printf '%s' "$segs" | grep -qiE 'github\.com[:/]|--repo[= ]|git@' || return 0
+  if [ -z "$PROTOCOL_OWNER" ]; then
+    _protocol_fail "ID-105" "PROTOCOL_OWNER is not set, so no repo can be recognised as yours." \
+      "Set it in $PROTOCOL_CONF (see protocol.conf.example)"
+    return
+  fi
   printf '%s' "$segs" | grep -qi "$PROTOCOL_OWNER" && return 0
   _protocol_fail "ID-105" "Target does not name $PROTOCOL_OWNER — refusing to touch a non-owned repo." \
     "Use $PROTOCOL_OWNER forks only."
@@ -258,7 +282,13 @@ rule_gitleaks_staged() { # ID-203
 # how to find and call it. See lib/personal-identifiers.example.sh.
 rule_personal_identifiers() { # ID-401
   [ "$#" -eq 0 ] && return 0
-  local candidate
+  local candidate keep=""
+  for candidate in "$@"; do
+    _protocol_is_attribution "$candidate" || keep="$keep $candidate"
+  done
+  # shellcheck disable=SC2086
+  set -- $keep
+  [ "$#" -eq 0 ] && return 0
   for candidate in \
     "${PROTOCOL_SCREEN:-}" \
     "$HOME/.agents/lib/personal-identifiers.sh" \
@@ -276,6 +306,61 @@ rule_personal_identifiers() { # ID-401
 
   screen_files "$@" && return 0
   _protocol_fail "ID-401" "Personal or third-party identifier in staged content."
+}
+
+# Generic leak rules. Unlike ID-401 these name no individual, so they can ship
+# in a public repository and protect a machine that has no local screen.
+
+# RFC1918 and link-local. Public addresses are not flagged: a documentation
+# example or a DNS root server is not a disclosure, and flagging every dotted
+# quad trains you to ignore the rule.
+PROTOCOL_PRIVATE_IP_RE='(^|[^0-9.])(192\.168\.[0-9]{1,3}\.[0-9]{1,3}|10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3}|169\.254\.[0-9]{1,3}\.[0-9]{1,3})([^0-9]|$)'
+
+rule_no_private_ips() { # ID-402
+  [ "$#" -eq 0 ] && return 0
+  local hits
+  hits=$(grep -lE "$PROTOCOL_PRIVATE_IP_RE" "$@" 2>/dev/null || true)
+  [ -z "$hits" ] && return 0
+  _protocol_fail "ID-402" "Private network address in: $(echo "$hits" | tr '\n' ' ')" \
+    "Use a hostname such as db.example.com, or describe the range in words."
+}
+
+# A home directory path leaks the account name and the machine's layout, and it
+# is never portable, so it is a defect on its own terms.
+PROTOCOL_LOCAL_PATH_RE='(/Users/[A-Za-z0-9._-]+|/home/[A-Za-z0-9._-]+|C:\\\\Users\\\\[A-Za-z0-9._-]+)'
+
+rule_no_local_paths() { # ID-403
+  [ "$#" -eq 0 ] && return 0
+  local f hits found=""
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    # A generic example path names nobody.
+    hits=$(grep -nE "$PROTOCOL_LOCAL_PATH_RE" "$f" 2>/dev/null \
+           | grep -vE '/(Users|home)/(you|user|username|me|example|<[a-z]+>)' | head -3 || true)
+    [ -n "$hits" ] && found="$found$f: $hits
+"
+  done
+  [ -z "$found" ] && return 0
+  _protocol_fail "ID-403" "Local filesystem path:
+$found" "Write \$HOME or ~ instead."
+}
+
+PROTOCOL_PERSONAL_EMAIL_RE='[A-Za-z0-9._%+-]+@(gmail|googlemail|outlook|hotmail|live|yahoo|icloud|me|proton|protonmail|pm)\.[a-z.]{2,}'
+
+rule_no_personal_email() { # ID-404
+  [ "$#" -eq 0 ] && return 0
+  local f hits found=""
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    _protocol_is_attribution "$f" && continue
+    hits=$(grep -nEi "$PROTOCOL_PERSONAL_EMAIL_RE" "$f" 2>/dev/null \
+           | grep -vEi '(you|user|username|someone|example|name)@' | head -3 || true)
+    [ -n "$hits" ] && found="$found$f: $hits
+"
+  done
+  [ -z "$found" ] && return 0
+  _protocol_fail "ID-404" "Personal email address:
+$found" "Commit under the noreply address only."
 }
 
 # --- commit format ----------------------------------------------------------
@@ -364,6 +449,12 @@ protocol_check_staged() {
     rule_no_secrets_in_files $existing
     # shellcheck disable=SC2086
     rule_personal_identifiers $existing
+    # shellcheck disable=SC2086
+    rule_no_private_ips $existing
+    # shellcheck disable=SC2086
+    rule_no_local_paths $existing
+    # shellcheck disable=SC2086
+    rule_no_personal_email $existing
   fi
   rule_gitleaks_staged
 

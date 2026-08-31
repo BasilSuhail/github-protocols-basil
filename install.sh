@@ -13,9 +13,38 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "Installing protocols from: $SCRIPT_DIR"
 echo ""
 
-echo "1. Global git config"
-git config --global user.name "Basil Suhail"
-git config --global user.email "BasilSuhail@users.noreply.github.com"
+echo "1. Identity"
+# Identity is not stored in this repository. It lives in an untracked config,
+# because the repo is public and a real name and address are precisely what
+# ID-401 to ID-404 exist to keep out of it.
+CONF="$HOME/.agents/protocol.conf"
+mkdir -p "$HOME/.agents"
+if [ ! -f "$CONF" ]; then
+  # Bootstrap from whatever git already knows, so a first run is not a form.
+  EXIST_NAME=$(git config --global user.name 2>/dev/null || true)
+  EXIST_EMAIL=$(git config --global user.email 2>/dev/null || true)
+  EXIST_OWNER="${EXIST_EMAIL%%@*}"
+  {
+    echo "# Written by install.sh. Untracked, never pushed."
+    echo "PROTOCOL_OWNER=\"${EXIST_OWNER:-your-github-handle}\""
+    echo "PROTOCOL_NAME=\"${EXIST_NAME:-Your Name}\""
+    echo "PROTOCOL_EMAIL=\"${EXIST_EMAIL:-your-github-handle@users.noreply.github.com}\""
+    echo "PROTOCOL_EMAIL_SUFFIX=\"users.noreply.github.com\""
+  } > "$CONF"
+  echo "   created $CONF from your existing git config — review it"
+fi
+# shellcheck source=/dev/null
+. "$CONF"
+
+if [ -z "${PROTOCOL_OWNER:-}" ] || [ "$PROTOCOL_OWNER" = "your-github-handle" ]; then
+  echo "   ERROR: set PROTOCOL_OWNER in $CONF before continuing." >&2
+  exit 1
+fi
+
+echo "2. Global git config"
+git config --global user.name "$PROTOCOL_NAME"
+git config --global user.email "$PROTOCOL_EMAIL"
+git config --global protocol.owner "$PROTOCOL_OWNER"
 git config --global init.templateDir "$HOME/.git-templates"
 git config --global push.default current
 git config --global push.autoSetupRemote true
@@ -24,7 +53,7 @@ git config --global commit.cleanup strip
 git config --global branch.sort -committerdate
 echo "   done"
 
-echo "2. Rule engine -> ~/.agents/lib/rules.sh"
+echo "3. Rule engine -> ~/.agents/lib/rules.sh"
 mkdir -p "$HOME/.agents/lib"
 cp "$SCRIPT_DIR/lib/rules.sh" "$HOME/.agents/lib/rules.sh"
 
@@ -45,7 +74,7 @@ fi
 [ -f "$SCREEN" ] || echo "   NOTE: no identifier screen (ID-401 inactive). See lib/personal-identifiers.example.sh"
 echo "   done"
 
-echo "3. Git hook templates -> ~/.git-templates/hooks"
+echo "4. Git hook templates -> ~/.git-templates/hooks"
 mkdir -p "$HOME/.git-templates/hooks"
 for h in pre-commit commit-msg pre-push; do
   cp "$SCRIPT_DIR/hooks/git-templates/$h" "$HOME/.git-templates/hooks/$h"
@@ -54,7 +83,7 @@ done
 echo "   done"
 
 if [ -d "$HOME/.claude" ]; then
-  echo "4. Claude Code adapter -> ~/.claude/hooks/pretooluse.sh"
+  echo "5. Claude Code adapter -> ~/.claude/hooks/pretooluse.sh"
   mkdir -p "$HOME/.claude/hooks"
   cp "$SCRIPT_DIR/hooks/claude-code/pretooluse.sh" "$HOME/.claude/hooks/pretooluse.sh"
   chmod +x "$HOME/.claude/hooks/pretooluse.sh"
@@ -93,11 +122,11 @@ if [ -d "$HOME/.claude" ]; then
     echo '         bash "$HOME/.claude/hooks/pretooluse.sh"'
   fi
 else
-  echo "4. Skipping Claude Code adapter (~/.claude not found)"
+  echo "5. Skipping Claude Code adapter (~/.claude not found)"
 fi
 
 if [ -d "$HOME/.claude" ]; then
-  echo "4b. Skills -> ~/.claude/skills"
+  echo "6. Skills -> ~/.claude/skills"
   mkdir -p "$HOME/.claude/skills"
   for skill in "$SCRIPT_DIR"/skills/*/; do
     [ -d "$skill" ] || continue
@@ -109,28 +138,28 @@ if [ -d "$HOME/.claude" ]; then
 fi
 
 if [ -d "$HOME/.cursor" ]; then
-  echo "4c. Cursor rules -> ~/.cursor/rules"
+  echo "7. Cursor rules -> ~/.cursor/rules"
   mkdir -p "$HOME/.cursor/rules"
   cp "$SCRIPT_DIR/rules/"*.mdc "$HOME/.cursor/rules/" 2>/dev/null || true
   echo "   done"
 fi
 
-echo "5. Universal agent rules -> ~/.agents/rules"
+echo "8. Universal agent rules -> ~/.agents/rules"
 mkdir -p "$HOME/.agents/rules"
 cp "$SCRIPT_DIR/rules/"*.md "$HOME/.agents/rules/"
 echo "   done"
 
 if [ -d "$HOME/.codex" ]; then
-  echo "6. Codex rules -> ~/.codex"
+  echo "9. Codex rules -> ~/.codex"
   mkdir -p "$HOME/.codex/rules"
   cp "$SCRIPT_DIR/rules/"*.md "$HOME/.codex/rules/"
   cp "$SCRIPT_DIR/AGENTS.md" "$HOME/.codex/AGENTS.md"
   echo "   done"
 else
-  echo "6. Skipping Codex rules (~/.codex not found)"
+  echo "9. Skipping Codex rules (~/.codex not found)"
 fi
 
-echo "7. Tooling"
+echo "10. Tooling"
 command -v gitleaks >/dev/null 2>&1 && echo "   gitleaks: $(gitleaks version 2>/dev/null)" \
   || echo "   gitleaks MISSING — brew install gitleaks"
 command -v jq >/dev/null 2>&1 && echo "   jq: $(jq --version)" \

@@ -5,8 +5,7 @@
 - Owner: BasilSuhail
 
 ## Identity
-- Author: Basil Suhail
-- Email: BasilSuhail@users.noreply.github.com
+- Author and email: from `~/.agents/protocol.conf` (untracked). Never hardcode them here.
 - No Co-Authored-By lines. No AI attribution. Single author on all commits.
 
 ## Commits

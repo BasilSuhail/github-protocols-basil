@@ -156,7 +156,7 @@ Install targets:
 ## Repo Rules
 
 - Owner: `BasilSuhail`
-- Identity: `Basil Suhail <BasilSuhail@users.noreply.github.com>`
+- Identity: from `~/.agents/protocol.conf` (untracked)
 - Never push directly to upstream
 - Never create PRs on upstream by default
 - Always verify target repo before `gh` commands

@@ -1,6 +1,6 @@
 ---
 name: git-workflow
-description: Universal Git workflow rules for Basil Suhail — enforced across all agentic coding tools
+description: Universal Git workflow rules — enforced across all agentic coding tools
 paths: ["**"]
 alwaysApply: true
 ---
@@ -11,12 +11,11 @@ These rules apply to ALL repositories, ALL branches, ALL tools.
 
 ## Identity
 
-- Author name: `Basil Suhail`
-- Author email: `BasilSuhail@users.noreply.github.com`
+- Author name and email: from `~/.agents/protocol.conf` (untracked)
 - NEVER include Co-Authored-By trailers. Single author on every commit.
 - NEVER use personal email `[PRIVATE_EMAIL]` in any commit.
 - NEVER include IP addresses, machine hostnames, or local paths in committed code.
-- Before your first commit in any repo, verify: `git config user.email` returns a noreply.github.com address. If not, set it: `git config user.email "BasilSuhail@users.noreply.github.com"`
+- Before your first commit in any repo, verify: `git config user.email` returns a noreply.github.com address. If not, set it: `git config user.email "<handle>@users.noreply.github.com"`
 
 ## Commit Messages
 

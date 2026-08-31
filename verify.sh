@@ -15,6 +15,10 @@ export PROTOCOL_LIB="$REPO_DIR/lib/rules.sh"
 PTU="$REPO_DIR/hooks/claude-code/pretooluse.sh"
 CMSG="$REPO_DIR/hooks/git-templates/commit-msg"
 
+# The suite must not hardcode an identity either.
+[ -f "$HOME/.agents/protocol.conf" ] && . "$HOME/.agents/protocol.conf"
+OWNER="${PROTOCOL_OWNER:-$(git config --get protocol.owner 2>/dev/null)}"
+
 PASS=0; FAIL=0
 ok()   { echo "  PASS: $1"; PASS=$((PASS+1)); }
 bad()  { echo "  FAIL: $1"; FAIL=$((FAIL+1)); }
@@ -64,15 +68,15 @@ expect_cmd 2 "blocks gh pr merge"           'gh pr merge 4 --squash'
 expect_cmd 2 "blocks gh create w/o --repo"  'gh issue create --title "x" --body "y"'
 expect_cmd 2 "blocks non-owned repo target" 'gh pr create --repo someoneelse/theirrepo --title x'
 expect_cmd 0 "allows clean commit"          'git commit -m "feat: add thing"'
-expect_cmd 0 "allows gh with --repo"        'gh issue create --repo BasilSuhail/x --title "y" --body "z"'
+expect_cmd 0 "allows gh with --repo"        "gh issue create --repo $OWNER/x --title y --body z"
 expect_cmd 0 "allows unrelated command"     'ls -la'
 echo ""
 
 echo "Payloads are data, not invocations (regression):"
 expect_cmd 0 "allows a force push quoted in a PR body" \
-  "gh pr create --repo BasilSuhail/x --title y --body 'run: git push --force origin main'"
+  "gh pr create --repo $OWNER/x --title y --body 'run: git push --force origin main'"
 expect_cmd 0 "allows a trailer quoted in a PR body" \
-  "gh pr create --repo BasilSuhail/x --title y --body 'never write Co-Authored-By: Someone'"
+  "gh pr create --repo $OWNER/x --title y --body 'never write Co-Authored-By: Someone'"
 expect_cmd 0 "allows reading a file that documents the rules" \
   'cat GITHUB-RULES.md'
 expect_cmd 0 "allows a heredoc body naming a blocked command" \
@@ -167,6 +171,48 @@ for h in pre-commit commit-msg pre-push; do
   elif cmp -s "$RH/$h" "$REPO_DIR/hooks/git-templates/$h"; then ok "$h is current"
   else bad "$h is STALE — bash scripts/refresh-repo-hooks.sh"; fi
 done
+echo ""
+
+echo "Leak rules (ID-402 to ID-404):"
+LK=$(mktemp -d)
+# Fixtures are assembled at runtime. Writing them as literals would put a
+# private IP, a home directory path and a personal address into this tracked
+# file -- the exact strings these rules exist to keep out of the repository.
+# The suite's own fixtures must not violate the suite.
+printf 'host 192.%s.1.44 is the box\n' "168"        > "$LK/ip.txt"
+printf 'see /%s/alice/folders/thing\n'  "Users"     > "$LK/path.txt"
+printf 'mail me at alice@%s.com\n'      "gmail"     > "$LK/mail.txt"
+printf 'credit: alice@%s.com for this\n' "gmail"    > "$LK/NOTICE"
+printf 'host 8.8.8.8 and /%s/you/x\n'   "Users"     > "$LK/ok.txt"
+
+leak() { # <rule> <file> <expected 0 pass|1 block> <desc>
+  local got
+  clean_env bash -c ". '$PROTOCOL_LIB'; $1 '$LK/$2'" >/dev/null 2>&1; got=$?
+  [ "$got" -eq "$3" ] && ok "$4" || bad "$4 (want $3, got $got)"
+}
+leak rule_no_private_ips    ip.txt    1 "blocks a private IP"
+leak rule_no_local_paths    path.txt  1 "blocks a home directory path"
+leak rule_no_personal_email mail.txt  1 "blocks a personal email"
+leak rule_no_personal_email NOTICE    0 "allows a personal email in NOTICE"
+leak rule_no_private_ips    ok.txt    0 "allows a public IP"
+leak rule_no_local_paths    ok.txt    0 "allows a placeholder path"
+rm -rf "$LK"
+echo ""
+
+echo "Identity is not hardcoded:"
+if grep -rIqE '[A-Za-z0-9._%+-]+@(gmail|outlook|hotmail|yahoo|icloud|proton)\.' \
+     --exclude-dir=.git --exclude=NOTICE --exclude=verify.sh "$REPO_DIR"; then
+  bad "no personal email address is tracked"
+else
+  ok "no personal email address is tracked"
+fi
+[ -n "$OWNER" ] && ok "PROTOCOL_OWNER resolved ($OWNER)" || bad "PROTOCOL_OWNER resolved"
+[ -f "$HOME/.agents/protocol.conf" ] && ok "protocol.conf exists" || bad "protocol.conf exists"
+if git -C "$REPO_DIR" ls-files --error-unmatch protocol.conf >/dev/null 2>&1; then
+  bad "protocol.conf is TRACKED — it must never be committed"
+else
+  ok "protocol.conf is not tracked"
+fi
 echo ""
 
 echo "Vendored skills:"

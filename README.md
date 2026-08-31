@@ -28,7 +28,9 @@ Identity is read from `~/.agents/protocol.conf`, which is never pushed.
 
 ---
 
-## 2. Protocols
+## 2. Protocols and Skills
+
+### Protocols
 
 | ID | Rule |
 |----|------|
@@ -65,33 +67,28 @@ PROTOCOL_OVERRIDE=ID-102 git push --force-with-lease origin my-branch
 
 Full detail in [GITHUB-RULES.md](GITHUB-RULES.md).
 
-### What Is Running
+### Skills
 
-Every rule is defined once in `lib/rules.sh` and enforced at four places.
+| Skill | Purpose |
+|-------|---------|
+| `karpathy-guidelines` | think before coding, keep it simple, surgical edits, verify |
+| `xlsx` | spreadsheets — read, edit, create `.xlsx` and `.csv` |
+| `docx` | Word documents — read, edit, create `.docx` |
+| `pptx` | slide decks — read, edit, create `.pptx` |
+| `pdf` | PDFs — read, merge, split, fill forms, OCR |
+| `frontend-design` | build and style web interfaces |
+| `humanizer` | rewrite AI-sounding prose so it reads naturally |
+| `remove-ai-marks` | strip AI watermarks, invisible Unicode, C2PA metadata |
+| `clean-user-facing-text` | final text hygiene pass on prose for readers |
 
-| Where | What it checks | Skippable |
-|-------|----------------|-----------|
-| `~/.claude/hooks/pretooluse.sh` | Claude Code commands, before they run | locally |
-| `~/.git-templates/hooks/pre-commit` | staged files | locally |
-| `~/.git-templates/hooks/commit-msg` | the commit message | locally |
-| `~/.git-templates/hooks/pre-push` | what you are about to push | locally |
-| `.github/workflows/protocol.yml` | every push and pull request | no |
-| GitHub ruleset on `main` | pull request required, no force push | no |
+`karpathy-guidelines` is installed. The rest sit in `~/.claude/skills-archive/`
+until you want them:
 
-### What Is Installed
+```bash
+mv ~/.claude/skills-archive/pdf ~/.claude/skills/pdf
+```
 
-| Path | Holds |
-|------|-------|
-| `~/.agents/lib/rules.sh` | the rule engine, all 23 rules |
-| `~/.agents/lib/personal-identifiers.sh` | ID-401 term list — untracked, never pushed |
-| `~/.agents/protocol.conf` | name and email — untracked, never pushed |
-| `~/.agents/rules/` | `agent-style` · `code-quality` · `completion-standard` · `git-workflow` · `karpathy-guidelines` |
-| `~/.codex/rules/` | same five, for Codex |
-| `~/.cursor/rules/` | `karpathy-guidelines.mdc`, for Cursor |
-| `~/.claude/skills/` | `karpathy-guidelines` |
-
-Working agreement: one issue, one branch, one pull request. Agents open pull
-requests. You merge.
+`skills.allowlist` controls which stay installed.
 
 ---
 

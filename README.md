@@ -90,9 +90,9 @@ Full detail: [GITHUB-RULES.md](GITHUB-RULES.md) ·
 | `pptx` | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/pptx) |
 | `pdf` | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/pdf) |
 | `frontend-design` | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/frontend-design) |
-| `humanizer` | Source unknown — only in `~/.claude/skills-archive/` |
-| `remove-ai-marks` | Source unknown — only in `~/.claude/skills-archive/` |
-| `clean-user-facing-text` | Source unknown — only in `~/.claude/skills-archive/` |
+| `humanizer` | [blader/humanizer](https://github.com/blader/humanizer) |
+| `remove-ai-marks` | [haidrrrry/claude-watermark-remover](https://github.com/haidrrrry/claude-watermark-remover/tree/main/skills/remove-claude-marks) |
+| `clean-user-facing-text` | [haidrrrry/claude-watermark-remover](https://github.com/haidrrrry/claude-watermark-remover/tree/main/skills/clean-user-facing-text) |
 | `karpathy-guidelines` | Installed by this repo — [source](https://github.com/multica-ai/andrej-karpathy-skills) |
 
 **Tools**

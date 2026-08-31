@@ -254,6 +254,29 @@ fi
 echo ""
 
 if machine_only; then
+echo "Global config is deduplicated:"
+S="$HOME/.claude/settings.json"
+if grep -qE 'CAVEMAN|1:1:1 PROTOCOL' "$S" 2>/dev/null; then
+  bad "no hand-rolled style hooks (the caveman plugin owns response style)"
+else
+  ok "no hand-rolled style hooks (the caveman plugin owns response style)"
+fi
+if grep -q 'any-buddy' "$S" 2>/dev/null; then
+  bad "no SessionStart hook pointing at an uninstalled binary"
+else
+  ok "no SessionStart hook pointing at an uninstalled binary"
+fi
+CMD_FILE="$HOME/.claude/CLAUDE.md"
+N=$(grep -c 'BEGIN protocol (generated' "$CMD_FILE" 2>/dev/null || echo 0)
+[ "$N" = "1" ] && ok "CLAUDE.md has exactly one generated block" \
+                || bad "CLAUDE.md has $N generated blocks, expected 1"
+if [ -f "$CMD_FILE" ]; then
+  EXPECT=$(sed "s/@OWNER@/$OWNER/g" "$REPO_DIR/templates/claude-md-block.tmpl")
+  GOT=$(awk '/BEGIN protocol \(generated/{f=1;next} /END protocol/{f=0} f' "$CMD_FILE")
+  [ "$EXPECT" = "$GOT" ] && ok "generated block is current" || bad "generated block is STALE — re-run install.sh"
+fi
+echo ""
+
 echo "Claude Code registration:"
 if grep -q 'pretooluse.sh' "$HOME/.claude/settings.json" 2>/dev/null; then
   ok "pretooluse.sh registered in settings.json"

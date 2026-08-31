@@ -1,53 +1,11 @@
 #!/usr/bin/env bash
-# Global Git Pre-Push Hook Template
-# Checks: no force push to main, email verification, upstream protection
-set -euo pipefail
+# Global pre-push adapter. git passes <remote-name> <remote-url>, ref updates on stdin.
+set -uo pipefail
 
-REMOTE="$1"
-URL="$2"
+PROTOCOL_LIB="${PROTOCOL_LIB:-$HOME/.agents/lib/rules.sh}"
+[ -f "$PROTOCOL_LIB" ] || { echo "ERROR: protocol rule engine missing at $PROTOCOL_LIB" >&2; exit 1; }
+# shellcheck source=/dev/null
+. "$PROTOCOL_LIB"
 
-# === 1. Block force push to main/master ===
-CURRENT_BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null || true)
-if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
-  # Check if this is a force push by looking at stdin
-  while read -r LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
-    if [ "$REMOTE_SHA" != "0000000000000000000000000000000000000000" ]; then
-      # Check if remote sha is ancestor of local sha (normal push)
-      if ! git merge-base --is-ancestor "$REMOTE_SHA" "$LOCAL_SHA" 2>/dev/null; then
-        echo "ERROR: Force push to $CURRENT_BRANCH detected. This is prohibited."
-        echo "Use a PR-based workflow instead."
-        exit 1
-      fi
-    fi
-  done
-fi
-
-# === 2. Upstream Protection ===
-if ! echo "$URL" | grep -qi 'BasilSuhail'; then
-  echo "ERROR: Cannot push to non-Basil upstream repositories."
-  echo "Only push to BasilSuhail forks unless explicitly overridden."
-  exit 1
-fi
-
-# === 3. Email Verification ===
-CURRENT_EMAIL=$(git config user.email 2>/dev/null || true)
-case "$CURRENT_EMAIL" in
-  *noreply.github.com) ;; # OK
-  *)
-    echo "ERROR: git user.email is '$CURRENT_EMAIL'"
-    echo "Must use noreply.github.com email before pushing."
-    echo "Run: git config user.email 'BasilSuhail@users.noreply.github.com'"
-    exit 1
-    ;;
-esac
-
-# === 4. Check for secrets in recent commits ===
-if command -v gitleaks &>/dev/null; then
-  gitleaks detect --source . --log-opts="$REMOTE..$CURRENT_BRANCH" --no-banner 2>/dev/null || {
-    echo "ERROR: Gitleaks found secrets in commits being pushed."
-    echo "Remove secrets before pushing."
-    exit 1
-  }
-fi
-
+protocol_check_refs "${2:-}" || exit 1
 exit 0

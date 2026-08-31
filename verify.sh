@@ -1,91 +1,188 @@
 #!/usr/bin/env bash
-# GitHub Protocols — Verification Script
-set -euo pipefail
+# Protocol verification.
+#
+# Every behaviour test drives an adapter through the SAME contract the real
+# caller uses — Claude Code pipes JSON on stdin, git passes a message file,
+# git passes ref updates on stdin. A test that fabricates a convenient input
+# is worse than no test: the previous version of this script set
+# CLAUDE_TOOL_NAME/CLAUDE_TOOL_INPUT itself and therefore reported PASS while
+# every hook in production was a no-op.
 
-PASS=0
-FAIL=0
+set -uo pipefail
 
-check() {
-  if eval "$2" >/dev/null 2>&1; then
-    echo "  PASS: $1"
-    PASS=$((PASS + 1))
-  else
-    echo "  FAIL: $1"
-    FAIL=$((FAIL + 1))
-  fi
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PROTOCOL_LIB="$REPO_DIR/lib/rules.sh"
+PTU="$REPO_DIR/hooks/claude-code/pretooluse.sh"
+CMSG="$REPO_DIR/hooks/git-templates/commit-msg"
+
+PASS=0; FAIL=0
+ok()   { echo "  PASS: $1"; PASS=$((PASS+1)); }
+bad()  { echo "  FAIL: $1"; FAIL=$((FAIL+1)); }
+
+# Strip every agent marker so the harness itself never influences a rule.
+clean_env() { env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CODEX_SANDBOX \
+                  -u CODEX_HOME -u CURSOR_TRACE_ID -u AIDER_MODEL \
+                  -u OPENCODE_SESSION -u GEMINI_CLI -u PROTOCOL_OVERRIDE "$@"; }
+
+# expect_cmd <expected-exit> <description> <command-string>
+expect_cmd() {
+  local want="$1" desc="$2" cmd="$3" got
+  printf '{"tool_name":"Bash","tool_input":{"command":%s}}' "$(printf '%s' "$cmd" | jq -Rs .)" \
+    | clean_env bash "$PTU" >/dev/null 2>&1
+  got=$?
+  [ "$got" -eq "$want" ] && ok "$desc" || bad "$desc (want exit $want, got $got)"
 }
 
-echo "GitHub Protocols Verification"
-echo "============================="
+# expect_msg <expected-exit> <description> <message>
+expect_msg() {
+  local want="$1" desc="$2" msg="$3" got tmp
+  tmp=$(mktemp); printf '%s\n' "$msg" > "$tmp"
+  clean_env bash "$CMSG" "$tmp" >/dev/null 2>&1; got=$?
+  rm -f "$tmp"
+  [ "$got" -eq "$want" ] && ok "$desc" || bad "$desc (want exit $want, got $got)"
+}
+
+echo "Protocol Verification"
+echo "====================="
 echo ""
 
-echo "Global Git Config:"
-check "Email is noreply" "git config --global user.email | grep -q noreply.github.com"
-check "Template dir set" "git config --global init.templateDir | grep -q git-templates"
-check "Push default = current" "git config --global push.default | grep -q current"
-check "Pull rebase = true" "git config --global pull.rebase | grep -q true"
+echo "Rule engine:"
+[ -f "$PROTOCOL_LIB" ] && ok "lib/rules.sh present" || bad "lib/rules.sh present"
+bash -n "$PROTOCOL_LIB" 2>/dev/null && ok "lib/rules.sh parses" || bad "lib/rules.sh parses"
 echo ""
 
-echo "Git Hook Templates:"
-check "pre-commit exists" "test -x ~/.git-templates/hooks/pre-commit"
-check "pre-push exists" "test -x ~/.git-templates/hooks/pre-push"
+echo "Claude Code adapter (real stdin JSON contract):"
+expect_cmd 2 "blocks Co-Authored-By"        'git commit -m "feat: x" --trailer "Co-Authored-By: Claude <noreply@anthropic.com>"'
+expect_cmd 2 "blocks force push"            'git push --force origin main'
+expect_cmd 2 "blocks force-with-lease"      'git push --force-with-lease origin feat/x'
+expect_cmd 2 "blocks git add -A"            'git add -A'
+expect_cmd 2 "blocks git add ."             'git add .'
+expect_cmd 2 "blocks --no-verify"           'git commit --no-verify -m "fix: x"'
+expect_cmd 2 "blocks git reset --hard"      'git reset --hard HEAD~3'
+expect_cmd 2 "blocks git clean -fd"         'git clean -fd'
+expect_cmd 2 "blocks gh pr merge"           'gh pr merge 4 --squash'
+expect_cmd 2 "blocks gh create w/o --repo"  'gh issue create --title "x" --body "y"'
+expect_cmd 2 "blocks non-owned repo target" 'gh pr create --repo someoneelse/theirrepo --title x'
+expect_cmd 0 "allows clean commit"          'git commit -m "feat: add thing"'
+expect_cmd 0 "allows gh with --repo"        'gh issue create --repo BasilSuhail/x --title "y" --body "z"'
+expect_cmd 0 "allows unrelated command"     'ls -la'
 echo ""
 
-echo "Claude Code Hooks:"
-check "git-commit-guard.sh" "test -x ~/.claude/hooks/git-commit-guard.sh"
-check "git-push-guard.sh" "test -x ~/.claude/hooks/git-push-guard.sh"
-check "self-review-gate.sh" "test -x ~/.claude/hooks/self-review-gate.sh"
-check "Hooks in settings.json" "test $(grep -c 'git-commit-guard\|git-push-guard\|self-review-gate' ~/.claude/settings.json 2>/dev/null) -eq 3"
+echo "Claude Code adapter (non-Bash and malformed payloads):"
+echo '{"tool_name":"Read","tool_input":{"file_path":"/x"}}' | clean_env bash "$PTU" >/dev/null 2>&1 \
+  && ok "ignores non-Bash tools" || bad "ignores non-Bash tools"
+echo 'not json' | clean_env bash "$PTU" >/dev/null 2>&1 \
+  && ok "survives malformed payload" || bad "survives malformed payload"
 echo ""
 
-echo "Gitleaks:"
-check "Gitleaks installed" "command -v gitleaks"
+echo "commit-msg adapter:"
+expect_msg 0 "allows conventional subject"  'feat(auth): add token refresh'
+expect_msg 0 "allows issue reference"       'fix: #12 prevent null pointer in parser'
+expect_msg 1 "blocks non-conventional"      'added some stuff'
+expect_msg 1 "blocks emoji"                 'feat: add sparkles 🚀'
+expect_msg 1 "blocks >72 char subject"      "feat: $(printf 'x%.0s' $(seq 1 80))"
+expect_msg 1 "blocks Co-Authored-By body"   "$(printf 'feat: x\n\nCo-Authored-By: Claude <noreply@anthropic.com>')"
 echo ""
 
-echo "Universal Rules:"
-check "~/.agents/rules/git-workflow.md" "test -f ~/.agents/rules/git-workflow.md"
-check "~/.agents/rules/completion-standard.md" "test -f ~/.agents/rules/completion-standard.md"
-check "~/.agents/rules/code-quality.md" "test -f ~/.agents/rules/code-quality.md"
+echo "Override guard (agents must never unblock themselves):"
+printf '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main"}}' \
+  | CLAUDECODE=1 PROTOCOL_OVERRIDE=ID-102 bash "$PTU" >/dev/null 2>&1
+[ $? -eq 2 ] && ok "refuses override inside an agent session" || bad "refuses override inside an agent session"
+printf '{"tool_name":"Bash","tool_input":{"command":"git push --force origin feat/x"}}' \
+  | clean_env PROTOCOL_OVERRIDE=ID-102 PROTOCOL_OVERRIDE_LOG=/dev/null bash "$PTU" >/dev/null 2>&1
+[ $? -eq 0 ] && ok "honours override from a human shell" || bad "honours override from a human shell"
 echo ""
 
-echo "Codex Rules:"
-check "~/.codex/rules/ has 4 files" "test $(ls ~/.codex/rules/*.md 2>/dev/null | wc -l) -ge 4"
-check "~/.codex/AGENTS.md exists" "test -f ~/.codex/AGENTS.md"
+echo "Installed copies match this repo:"
+for pair in \
+  "$HOME/.agents/lib/rules.sh:lib/rules.sh" \
+  "$HOME/.claude/hooks/pretooluse.sh:hooks/claude-code/pretooluse.sh" \
+  "$HOME/.git-templates/hooks/pre-commit:hooks/git-templates/pre-commit" \
+  "$HOME/.git-templates/hooks/commit-msg:hooks/git-templates/commit-msg" \
+  "$HOME/.git-templates/hooks/pre-push:hooks/git-templates/pre-push"; do
+  dst="${pair%%:*}"; src="$REPO_DIR/${pair##*:}"
+  if [ ! -f "$dst" ]; then bad "$(basename "$dst") installed"
+  elif cmp -s "$dst" "$src"; then ok "$(basename "$dst") installed and current"
+  else bad "$(basename "$dst") is STALE — re-run install.sh"; fi
+done
 echo ""
 
-echo "Hook Behavior Tests:"
-# Test commit guard blocks Co-Authored-By
-if CLAUDE_TOOL_NAME="Bash" CLAUDE_TOOL_INPUT='git commit --trailer "Co-Authored-By: X"' bash ~/.claude/hooks/git-commit-guard.sh 2>/dev/null; then
-  echo "  FAIL: Commit guard should block Co-Authored-By"
-  FAIL=$((FAIL + 1))
+echo "Identifier screen (ID-401):"
+SCREEN_TMP=$(mktemp -d)
+cat > "$SCREEN_TMP/screen.sh" <<'SCR'
+screen_files() {
+  for f in "$@"; do
+    grep -q 'ZZ_TEST_IDENTIFIER' "$f" 2>/dev/null && { echo "BLOCKED $f"; return 1; }
+  done
+  return 0
+}
+SCR
+printf 'contact ZZ_TEST_IDENTIFIER here\n' > "$SCREEN_TMP/dirty.txt"
+printf 'nothing to see\n' > "$SCREEN_TMP/clean.txt"
+if clean_env bash -c ". '$PROTOCOL_LIB'; PROTOCOL_SCREEN='$SCREEN_TMP/screen.sh' rule_personal_identifiers '$SCREEN_TMP/dirty.txt'" >/dev/null 2>&1; then
+  bad "screen blocks a flagged file"
 else
-  echo "  PASS: Commit guard blocks Co-Authored-By"
-  PASS=$((PASS + 1))
+  ok "screen blocks a flagged file"
 fi
-
-# Test push guard blocks force push
-if CLAUDE_TOOL_NAME="Bash" CLAUDE_TOOL_INPUT='git push --force' bash ~/.claude/hooks/git-push-guard.sh 2>/dev/null; then
-  echo "  FAIL: Push guard should block force push"
-  FAIL=$((FAIL + 1))
+if clean_env bash -c ". '$PROTOCOL_LIB'; PROTOCOL_SCREEN='$SCREEN_TMP/screen.sh' rule_personal_identifiers '$SCREEN_TMP/clean.txt'" >/dev/null 2>&1; then
+  ok "screen passes a clean file"
 else
-  echo "  PASS: Push guard blocks force push"
-  PASS=$((PASS + 1))
+  bad "screen passes a clean file"
 fi
-
-# Test clean commit passes
-if CLAUDE_TOOL_NAME="Bash" CLAUDE_TOOL_INPUT='git commit -m "feat: test"' bash ~/.claude/hooks/git-commit-guard.sh 2>/dev/null; then
-  echo "  PASS: Clean commit passes"
-  PASS=$((PASS + 1))
+if clean_env bash -c ". '$PROTOCOL_LIB'; PROTOCOL_SCREEN=/nonexistent HOME='$SCREEN_TMP' rule_personal_identifiers '$SCREEN_TMP/dirty.txt'" >/dev/null 2>&1; then
+  ok "absent screen is inactive, not a failure"
 else
-  echo "  FAIL: Clean commit should pass"
-  FAIL=$((FAIL + 1))
+  bad "absent screen is inactive, not a failure"
 fi
-
+rm -rf "$SCREEN_TMP"
+if [ -f "$HOME/.agents/lib/personal-identifiers.sh" ]; then
+  ok "a real screen is installed on this machine"
+else
+  bad "no screen at ~/.agents/lib/personal-identifiers.sh — ID-401 is inactive"
+fi
+if git ls-files --error-unmatch lib/personal-identifiers.sh >/dev/null 2>&1; then
+  bad "a real screen is TRACKED — it must never be committed"
+else
+  ok "no real screen is tracked in this repo"
+fi
 echo ""
-echo "============================="
+
+echo "This repo's own hooks (git init never overwrites):"
+RH="$REPO_DIR/$(git -C "$REPO_DIR" rev-parse --git-path hooks)"
+for h in pre-commit commit-msg pre-push; do
+  if [ ! -f "$RH/$h" ]; then bad "$h present in .git/hooks"
+  elif cmp -s "$RH/$h" "$REPO_DIR/hooks/git-templates/$h"; then ok "$h is current"
+  else bad "$h is STALE — bash scripts/refresh-repo-hooks.sh"; fi
+done
+echo ""
+
+echo "Global git config:"
+git config --global user.email 2>/dev/null | grep -q noreply.github.com \
+  && ok "email is noreply" || bad "email is noreply"
+git config --global init.templateDir 2>/dev/null | grep -q git-templates \
+  && ok "template dir set" || bad "template dir set"
+echo ""
+
+echo "Claude Code registration:"
+if grep -q 'pretooluse.sh' "$HOME/.claude/settings.json" 2>/dev/null; then
+  ok "pretooluse.sh registered in settings.json"
+else
+  bad "pretooluse.sh registered in settings.json"
+fi
+if grep -qE 'git-commit-guard|git-push-guard|self-review-gate' "$HOME/.claude/settings.json" 2>/dev/null; then
+  bad "stale guard hooks still registered — remove them from settings.json"
+else
+  ok "no stale guard hooks registered"
+fi
+echo ""
+
+echo "Tooling:"
+command -v gitleaks >/dev/null 2>&1 && ok "gitleaks installed" || bad "gitleaks installed"
+command -v jq >/dev/null 2>&1 && ok "jq installed" || bad "jq installed"
+echo ""
+
+echo "====================="
 echo "Results: $PASS passed, $FAIL failed"
-if [ "$FAIL" -eq 0 ]; then
-  echo "ALL SYSTEMS OPERATIONAL"
-else
-  echo "ISSUES FOUND — review failures above"
-fi
+[ "$FAIL" -eq 0 ] && { echo "ALL SYSTEMS OPERATIONAL"; exit 0; }
+echo "ISSUES FOUND — review failures above"
+exit 1

@@ -5,116 +5,94 @@
 - Git 2.40+
 - GitHub CLI (`gh`): `brew install gh`
 - Gitleaks: `brew install gitleaks`
-- (Optional) pre-commit framework: `pip install pre-commit`
+- jq: `brew install jq`
 
-## Step 1: Global Git Config
-
-```bash
-# Set noreply email globally
-git config --global user.email "BasilSuhail@users.noreply.github.com"
-git config --global user.name "Basil Suhail"
-
-# Set template directory for auto-applying hooks to new repos
-git config --global init.templateDir "~/.git-templates"
-
-# Push/pull defaults
-git config --global push.default current
-git config --global push.autoSetupRemote true
-git config --global pull.rebase true
-git config --global commit.cleanup strip
-git config --global branch.sort -committerdate
-```
-
-## Step 2: Install Git Hook Templates
+## Install
 
 ```bash
-# Create template directory
-mkdir -p ~/.git-templates/hooks
-
-# Copy hook templates
-cp hooks/git-templates/pre-commit ~/.git-templates/hooks/pre-commit
-cp hooks/git-templates/pre-push ~/.git-templates/hooks/pre-push
-
-# Make executable
-chmod +x ~/.git-templates/hooks/pre-commit
-chmod +x ~/.git-templates/hooks/pre-push
+bash install.sh
+bash verify.sh
 ```
 
-## Step 3: Apply to Existing Repos
+`install.sh` is the supported path. It writes global git config, installs the
+rule engine and every adapter, retires superseded hooks, and registers the
+Claude Code adapter in `settings.json` (backing the file up first).
+
+Registration used to be a manual step. That is exactly how three hooks stayed
+registered under names that no longer enforced anything, so the installer now
+does it.
+
+## What Gets Installed Where
+
+| Path | Purpose |
+|------|---------|
+| `~/.agents/lib/rules.sh` | Rule engine. Every rule is defined here once. |
+| `~/.claude/hooks/pretooluse.sh` | Claude Code adapter (reads stdin JSON) |
+| `~/.git-templates/hooks/pre-commit` | Staged-content adapter |
+| `~/.git-templates/hooks/commit-msg` | Commit-message adapter |
+| `~/.git-templates/hooks/pre-push` | Ref-update adapter |
+| `~/.agents/rules/*.md` | Prose rules for any agent tool |
+| `~/.codex/rules/*.md`, `~/.codex/AGENTS.md` | Codex CLI/app |
+| `~/.agents/lib/personal-identifiers.sh` | Identifier screen. **Untracked, never pushed.** |
+
+Adapters do not contain rules. They translate their caller's input format and
+hand it to the engine, so a rule cannot be fixed in one layer and forgotten in
+three.
+
+## Apply To Existing Repos
+
+`git init` is **not** enough. It copies a template hook only when no file of
+that name already exists, and it never overwrites. A repo set up before a hook
+changed keeps running the old hook indefinitely, while the template directory
+looks perfectly current.
 
 ```bash
-# Safe operation — only copies hooks, doesn't destroy data
-cd /path/to/your/repo
-git init  # Re-applies templates
-
-# Or bulk-apply to all repos:
-find ~ -name ".git" -type d -maxdepth 4 \
-  -not -path "*/.claude/*" \
-  -not -path "*/node_modules/*" \
-  -not -path "*/Library/*" \
-  2>/dev/null | sed 's/\/.git$//' | while read dir; do
-  cd "$dir" && git init --template="$HOME/.git-templates" >/dev/null 2>&1
-done
+bash scripts/refresh-repo-hooks.sh                 # current repo
+bash scripts/refresh-repo-hooks.sh ~/code/a ~/code/b
+bash scripts/refresh-repo-hooks.sh --all ~/folders # every repo under a root
 ```
 
-## Step 4: Claude Code Hooks (Claude Code users only)
+This only replaces hook files. It does not touch history or config.
+
+## Per-Repo Setup (New Projects)
 
 ```bash
-# Copy hook scripts
-cp hooks/claude-code/git-commit-guard.sh ~/.claude/hooks/
-cp hooks/claude-code/git-push-guard.sh ~/.claude/hooks/
-cp hooks/claude-code/self-review-gate.sh ~/.claude/hooks/
-chmod +x ~/.claude/hooks/git-*.sh ~/.claude/hooks/self-*.sh
-```
-
-Then add to `~/.claude/settings.json` under `hooks.PreToolUse`:
-
-```json
-{
-  "matcher": "Bash",
-  "hooks": [{ "type": "command", "command": "bash \"~/.claude/hooks/git-commit-guard.sh\"", "timeout": 3000 }]
-},
-{
-  "matcher": "Bash",
-  "hooks": [{ "type": "command", "command": "bash \"~/.claude/hooks/git-push-guard.sh\"", "timeout": 3000 }]
-},
-{
-  "matcher": "Bash",
-  "hooks": [{ "type": "command", "command": "bash \"~/.claude/hooks/self-review-gate.sh\"", "timeout": 5000 }]
-}
-```
-
-## Step 5: Universal Agent Rules
-
-```bash
-# For Claude Code, Codex, Cursor, Gemini CLI, OpenCode, Windsurf
-mkdir -p ~/.agents/rules
-cp rules/*.md ~/.agents/rules/
-
-# For Codex CLI/app specifically
-mkdir -p ~/.codex/rules
-cp rules/*.md ~/.codex/rules/
-cp AGENTS.md ~/.codex/AGENTS.md
-```
-
-## Step 6: Per-Repo Setup (New Projects)
-
-```bash
-# Copy AGENTS.md to new repo root
 cp AGENTS.md /path/to/new/repo/AGENTS.md
-
-# Optional: Add pre-commit framework
-cp templates/pre-commit-config.yaml /path/to/new/repo/.pre-commit-config.yaml
 cp templates/gitleaks.toml /path/to/new/repo/.gitleaks.toml
-cd /path/to/new/repo && pre-commit install
 ```
 
-## Step 7: Fix Email on Owned Repos
+## The Identifier Screen (ID-401)
+
+The list of names, institutions and contact details to block cannot live in
+this repository. A blocklist committed to a public repo publishes exactly the
+strings it exists to suppress. So the screen is a local file the engine looks
+for and calls; the repo ships only a placeholder example.
 
 ```bash
-# Check current email
-git config user.email
+cp lib/personal-identifiers.example.sh ~/.agents/lib/personal-identifiers.sh
+# then edit it with your real terms — that path is never tracked or pushed
+```
 
-# Fix if needed
-git config user.email "BasilSuhail@users.noreply.github.com"
+Without it, ID-401 is inactive and the rest of the protocol is unaffected.
+`install.sh` adopts a screen you already have and never overwrites one.
+
+## Overrides
+
+A blocked rule is meant to stop you. When a block is genuinely wrong, waive one
+rule for one command **from your own shell**:
+
+```bash
+PROTOCOL_OVERRIDE=ID-102 git push --force-with-lease origin feat/x
+```
+
+Overrides are refused whenever an agent environment marker is present, so no
+agent can waive a rule on its own. Every accepted override is appended to
+`~/.agents/override.log`.
+
+## Uninstall
+
+```bash
+rm -rf ~/.agents/lib ~/.git-templates/hooks
+rm -f ~/.claude/hooks/pretooluse.sh
+# then remove the pretooluse.sh entry from ~/.claude/settings.json
 ```

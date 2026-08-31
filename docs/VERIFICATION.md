@@ -1,86 +1,65 @@
 # Verification Guide
 
-Run these checks to confirm everything is properly installed.
-
-## Quick Verify Script
+## Run It
 
 ```bash
-bash ~/github-protocols-basil/verify.sh
+bash verify.sh
 ```
 
-## Manual Checks
+Exit 0 means every rule is enforced and every installed copy matches this repo.
+Exit 1 lists what failed.
 
-### 1. Global Git Config
+## Why The Tests Look The Way They Do
+
+Every behaviour test drives an adapter through the **same contract its real
+caller uses**:
+
+| Adapter | Contract the test reproduces |
+|---------|------------------------------|
+| `pretooluse.sh` | `{"tool_name":...,"tool_input":{"command":...}}` piped on stdin |
+| `commit-msg` | path to a message file as `$1` |
+| `pre-push` | remote name and URL as `$1`/`$2`, ref updates on stdin |
+
+This is not a stylistic preference. The previous suite set
+`CLAUDE_TOOL_NAME` / `CLAUDE_TOOL_INPUT` itself, which Claude Code never sets.
+It reported PASS on every rule while all three hooks exited at their first line
+in production. A test that invents a convenient input is worse than no test —
+it converts a total enforcement failure into a green check.
+
+The harness also strips every agent environment marker before each test, so the
+suite cannot accidentally pass because it happened to run inside an agent.
+
+## Coverage
+
+- **Blocked**: `Co-Authored-By`, force push, `--force-with-lease`, `git add -A`,
+  `git add .`, `--no-verify`, `git reset --hard`, `git clean -f`, `gh pr merge`,
+  `gh` write commands without `--repo`, non-owned repo targets,
+  non-conventional subjects, subjects over 72 chars, emoji, direct commits to
+  `main`.
+- **Allowed**: clean conventional commits, `gh` with `--repo`, unrelated shell
+  commands, non-Bash tools, malformed payloads.
+- **Override guard**: refused inside an agent session, honoured from a human
+  shell.
+- **Drift**: each installed file is byte-compared against this repo. A stale
+  copy fails the suite.
+
+## Manual Spot Checks
 
 ```bash
-git config --global user.email
-# Expected: BasilSuhail@users.noreply.github.com
+# Should print BLOCKED [ID-102] and exit 2
+echo '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main"}}' \
+  | bash ~/.claude/hooks/pretooluse.sh; echo "exit=$?"
 
-git config --global init.templateDir
-# Expected: ~/.git-templates
+# Should exit 0
+echo '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"feat: x\""}}' \
+  | bash ~/.claude/hooks/pretooluse.sh; echo "exit=$?"
+
+# Per-repo hooks present after a templateDir refresh
+ls -l /path/to/repo/.git/hooks/{pre-commit,commit-msg,pre-push}
 ```
 
-### 2. Git Hook Templates
+## When A Test Fails
 
-```bash
-ls -la ~/.git-templates/hooks/
-# Expected: pre-commit (executable), pre-push (executable)
-```
-
-### 3. Claude Code Hooks
-
-```bash
-ls -la ~/.claude/hooks/git-*.sh ~/.claude/hooks/self-*.sh
-# Expected: 3 executable scripts
-
-grep -c "git-commit-guard\|git-push-guard\|self-review-gate" ~/.claude/settings.json
-# Expected: 3
-```
-
-### 4. Gitleaks
-
-```bash
-gitleaks version
-# Expected: 8.x.x
-```
-
-### 5. Hook Tests
-
-```bash
-# Test commit guard blocks Co-Authored-By
-CLAUDE_TOOL_NAME="Bash" CLAUDE_TOOL_INPUT='git commit --trailer "Co-Authored-By: X"' \
-  bash ~/.claude/hooks/git-commit-guard.sh
-# Expected: BLOCKED (exit code 2)
-
-# Test push guard blocks force push
-CLAUDE_TOOL_NAME="Bash" CLAUDE_TOOL_INPUT='git push --force' \
-  bash ~/.claude/hooks/git-push-guard.sh
-# Expected: BLOCKED (exit code 2)
-
-# Test clean commands pass
-CLAUDE_TOOL_NAME="Bash" CLAUDE_TOOL_INPUT='git commit -m "feat: add auth"' \
-  bash ~/.claude/hooks/git-commit-guard.sh
-# Expected: exit code 0
-```
-
-### 6. Rules Files
-
-```bash
-ls ~/.agents/rules/*.md
-# Expected: 4 files including agent-style
-
-ls ~/.codex/rules/*.md
-# Expected: 4 files (mirrored)
-
-ls ~/.codex/AGENTS.md
-# Expected: exists
-```
-
-### 7. Per-Repo Hooks
-
-```bash
-# Check a specific repo
-ls -la /path/to/repo/.git/hooks/pre-commit
-ls -la /path/to/repo/.git/hooks/pre-push
-# Expected: both exist and are executable
-```
+Fix the engine or the adapter. Do not relax the test to match current
+behaviour, and do not add an override to make the suite green — overrides are
+for one command in a human shell, never for CI.

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Global pre-commit adapter. Installed to new repos via init.templateDir.
+# Global commit-msg adapter. The only layer that can see the final message,
+# including messages built with HEREDOC or an editor.
 set -uo pipefail
 
 PROTOCOL_LIB="${PROTOCOL_LIB:-$HOME/.agents/lib/rules.sh}"
@@ -7,5 +8,5 @@ PROTOCOL_LIB="${PROTOCOL_LIB:-$HOME/.agents/lib/rules.sh}"
 # shellcheck source=/dev/null
 . "$PROTOCOL_LIB"
 
-protocol_check_staged || exit 1
+protocol_check_msg "$1" || exit 1
 exit 0

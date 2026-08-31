@@ -160,10 +160,12 @@ else
   bad "absent screen is inactive, not a failure"
 fi
 rm -rf "$SCREEN_TMP"
-if [ -f "$HOME/.agents/lib/personal-identifiers.sh" ]; then
-  ok "a real screen is installed on this machine"
-else
-  bad "no screen at ~/.agents/lib/personal-identifiers.sh — ID-401 is inactive"
+if machine_only; then
+  if [ -f "$HOME/.agents/lib/personal-identifiers.sh" ]; then
+    ok "a real screen is installed on this machine"
+  else
+    bad "no screen at ~/.agents/lib/personal-identifiers.sh — ID-401 is inactive"
+  fi
 fi
 if git ls-files --error-unmatch lib/personal-identifiers.sh >/dev/null 2>&1; then
   bad "a real screen is TRACKED — it must never be committed"
@@ -217,7 +219,8 @@ else
   ok "no personal email address is tracked"
 fi
 [ -n "$OWNER" ] && ok "PROTOCOL_OWNER resolved ($OWNER)" || bad "PROTOCOL_OWNER resolved"
-[ -f "$HOME/.agents/protocol.conf" ] && ok "protocol.conf exists" || bad "protocol.conf exists"
+machine_only && { [ -f "$HOME/.agents/protocol.conf" ] \
+  && ok "protocol.conf exists" || bad "protocol.conf exists"; }
 if git -C "$REPO_DIR" ls-files --error-unmatch protocol.conf >/dev/null 2>&1; then
   bad "protocol.conf is TRACKED — it must never be committed"
 else

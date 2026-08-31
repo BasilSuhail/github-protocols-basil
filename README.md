@@ -1,122 +1,227 @@
 # GitHub Protocols
 
-Rules for agentic coding tools, enforced by hooks and CI rather than by asking
-politely. Every rule is defined once in `lib/rules.sh` and applied at four
-layers, so an agent cannot read its way around one.
+Rules for AI coding tools. They block bad commits instead of asking nicely.
 
-Binds Claude Code, Codex, Cursor, and anything else that runs `git`.
+Works with Claude Code, Codex, Cursor, and anything else that runs `git`.
 
-## Protocols
+---
 
-| ID | Rule |
-|----|------|
-| **Identity** | |
-| ID-001 | Commit address must end in `users.noreply.github.com` |
-| ID-002 | No `Co-Authored-By` trailer |
-| ID-003 | No AI attribution |
-| **Safety** | |
-| ID-101 | No `--no-verify` or `--no-gpg-sign` |
-| ID-102 | No force push, no non-fast-forward push |
-| ID-103 | No `git add -A` or `git add .` |
-| ID-104 | No `git reset --hard` or `git clean -f` |
-| ID-105 | Target repo must be one you own |
-| ID-106 | `gh` write commands require `--repo` |
-| ID-107 | No direct commit or push to `main` |
-| ID-108 | Agents never merge pull requests |
-| **Secrets** | |
-| ID-201 | No secret patterns in staged content |
-| ID-202 | No `.env`, credential or key files staged |
-| ID-203 | Gitleaks must pass on the staged diff |
-| **Commit format** | |
-| ID-301 | Conventional Commit subject |
-| ID-302 | Subject at most 72 characters |
-| ID-303 | No emoji |
-| **Leaks** | |
-| ID-401 | No personal or third-party identifiers (local, untracked term list) |
-| ID-402 | No private network addresses |
-| ID-403 | No home directory paths |
-| ID-404 | No personal email addresses |
+## How to install
 
-Every rule blocks. There are no advisory rules: an agent reads a warning and
-proceeds anyway, which is indistinguishable from having no rule.
+You run these in a terminal. You have two options.
 
-`PROTOCOL_OVERRIDE=<rule-id>` waives one rule for one command, and only from a
-human shell — it is refused whenever an agent environment marker is present.
+**Inside Claude Code** — start your message with `!`, then the command:
 
-## Enforcement layers
+```
+!bash verify.sh
+```
 
-| Layer | Binds | Bypassable |
-|-------|-------|------------|
-| `hooks/claude-code/pretooluse.sh` | Claude Code, before the command runs | yes, locally |
-| `hooks/git-templates/*` | every tool, at commit and push | yes, locally |
-| `.github/workflows/protocol.yml` | every push and PR | no |
-| GitHub ruleset on `main` | everything | no |
+It runs immediately and the output appears in the conversation. Easiest, because
+you are already in the right folder.
 
-The local layers catch mistakes early. The server-side layers are the ones that
-hold when a machine has no hooks installed.
+**Or a normal terminal** — press `Cmd+Space`, type `Terminal`, press Enter.
 
-## Working agreement
+Two commands are worth knowing. `cd <folder>` moves you into a folder.
+`bash <file>` runs a file.
 
-1 issue → 1 branch → 1 PR. Agents open pull requests; they never merge.
+### Install
 
-## Install
+```bash
+cd ~/folders/github-protocols-basil
+bash install.sh
+bash verify.sh
+```
+
+`verify.sh` should end with `ALL SYSTEMS OPERATIONAL`. If it does not, it prints
+one line per problem saying what is wrong.
+
+Run `install.sh` again any time. It is safe to repeat — it overwrites its own
+files and leaves yours alone.
+
+### Two things to do once
+
+Repositories you already have keep their old hooks. Git only copies a hook into
+a repository that does not already have one, and never replaces an existing one,
+so old repositories quietly keep running whatever they were set up with:
+
+```bash
+bash scripts/refresh-repo-hooks.sh --all ~/folders
+```
+
+Then protect `main` on GitHub, so the rules hold even from a machine that has
+none of this installed. Needs admin on the repository:
+
+```bash
+bash scripts/apply-github-ruleset.sh
+```
+
+### Setting up a second machine
 
 ```bash
 git clone https://github.com/BasilSuhail/github-protocols-basil.git
 cd github-protocols-basil
 bash install.sh
-bash verify.sh
 ```
 
-Identity lives in `~/.agents/protocol.conf`, which is never tracked. See
-[docs/INSTALLATION.md](docs/INSTALLATION.md) and
-[docs/VERIFICATION.md](docs/VERIFICATION.md).
+Your name and email are not in this repository. They live in
+`~/.agents/protocol.conf`, which is never uploaded. `install.sh` creates it from
+whatever git already knows on that machine.
 
-Existing repos keep their old hooks — `git init` never overwrites. Refresh them
-with `bash scripts/refresh-repo-hooks.sh --all ~/folders`.
+---
+
+## Protocol list
+
+### Identity
+
+| ID | Rule |
+|----|------|
+| ID-001 | Commit address must end in `users.noreply.github.com` |
+| ID-002 | No `Co-Authored-By` line |
+| ID-003 | No AI credited as an author |
+
+### Safety
+
+| ID | Rule |
+|----|------|
+| ID-101 | No `--no-verify` (that flag skips these checks) |
+| ID-102 | No force push |
+| ID-103 | No `git add -A` or `git add .` — name the files you mean |
+| ID-104 | No `git reset --hard` or `git clean -f` |
+| ID-105 | Only touch repositories you own |
+| ID-106 | `gh` commands must say `--repo`, so they cannot hit the wrong one |
+| ID-107 | No committing straight to `main` |
+| ID-108 | Agents never merge. You merge |
+
+### Secrets
+
+| ID | Rule |
+|----|------|
+| ID-201 | No API keys, tokens or passwords in committed files |
+| ID-202 | No `.env`, credential or key files |
+| ID-203 | Gitleaks must find nothing |
+
+### Commit messages
+
+| ID | Rule |
+|----|------|
+| ID-301 | Start with a type: `feat:`, `fix:`, `docs:`, `chore:`, and so on |
+| ID-302 | First line 72 characters or fewer |
+| ID-303 | No emoji |
+
+### Private information
+
+| ID | Rule |
+|----|------|
+| ID-401 | No personal names, institutions or contact details |
+| ID-402 | No private network addresses |
+| ID-403 | No `/Users/yourname/...` paths |
+| ID-404 | No personal email addresses |
+
+ID-401 reads its list of names from a file on your machine that is never
+uploaded. The list cannot live in this repository: publishing a list of things
+you want kept private publishes them.
+
+### When a rule blocks you
+
+You see this, and the command does not run:
+
+```
+BLOCKED [ID-103] Blanket staging is prohibited — it sweeps in .env, keys, and binaries.
+         Fix: Stage explicit paths: git add path/to/file
+```
+
+Do what the `Fix:` line says. Every rule blocks; none of them are warnings you
+can ignore, because a warning is something an agent reads and then does anyway.
+
+If a block is genuinely wrong, waive that one rule for that one command. This
+only works when you type it yourself — it is refused inside an AI session, so an
+agent can never switch off a rule that is stopping it:
+
+```bash
+PROTOCOL_OVERRIDE=ID-102 git push --force-with-lease origin my-branch
+```
+
+### Where the rules are enforced
+
+| Where | Covers | Can it be skipped? |
+|-------|--------|--------------------|
+| Claude Code, before a command runs | Claude Code only | Yes, on this machine |
+| Git, at commit and push | Every tool | Yes, on this machine |
+| GitHub Actions, on every push | Everything | No |
+| GitHub ruleset on `main` | Everything | No |
+
+The first two catch mistakes early. The last two are the ones that still work on
+a machine where nothing is installed.
+
+### Working agreement
+
+One issue, one branch, one pull request. Agents open pull requests. You merge.
+
+---
 
 ## Skills
 
-Skill *descriptions* load every session; *bodies* load only when invoked. Check
-the split with `claude plugin details <plugin>` — it prints `always-on` against
-`on-invoke`. So a 3.4k skill sitting unused costs about 40 tokens, and pruning
-skills is worth doing for a shorter list to choose from, not for the tokens.
+A skill's description loads every session; its instructions only load when it is
+actually used. Check with `claude plugin details <plugin>` — it shows `always-on`
+next to `on-invoke`. A large skill sitting unused costs very little, so trimming
+skills is about having a shorter list to choose from, not about saving space.
 
-`skills.allowlist` records what stays in `~/.claude/skills/`. `install.sh` moves
-anything else to `~/.claude/skills-archive/` — moved, never deleted. Restore one
-with:
+`skills.allowlist` lists which skills stay in `~/.claude/skills/`. `install.sh`
+moves the rest to `~/.claude/skills-archive/`. Moved, never deleted. To bring
+one back:
 
 ```bash
-mv ~/.claude/skills-archive/<name> ~/.claude/skills/<name>
+mv ~/.claude/skills-archive/pdf ~/.claude/skills/pdf
 ```
 
-Plugin skills cannot be pruned individually: `claude plugin disable` takes a
-plugin, not a skill, and edits to the plugin cache are wiped on update. The
-caveman and superpowers bundles are all-or-nothing, and both are kept.
+Skills that come from a plugin cannot be removed one at a time — a plugin
+installs all of its skills together or none of them.
 
-### Getting an archived skill back from source
+---
+
+## Links and credits
+
+### The protocol system
+
+**[@ShaheerKhawaja](https://github.com/ShaheerKhawaja)** — the original protocol
+system this is adapted from.
+
+### Vendored into this repository
+
+| What | Author | Source |
+|------|--------|--------|
+| `karpathy-guidelines` skill | forrestchang, MIT | [multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills) |
+
+Derived from **Andrej Karpathy's** observations on where AI coding goes wrong.
+The exact version copied is recorded in [NOTICE](NOTICE). Check it still matches
+upstream with `bash scripts/check-vendor-drift.sh`.
+
+### Archived skills, and where to get them again
 
 | Skill | Source |
 |-------|--------|
-| `xlsx`, `docx`, `pptx`, `pdf`, `frontend-design` | [anthropics/skills](https://github.com/anthropics/skills) — `skills/<name>/` |
-| `humanizer`, `remove-ai-marks`, `clean-user-facing-text` | Upstream unknown — restore from `~/.claude/skills-archive/` |
+| `xlsx`, `docx`, `pptx`, `pdf`, `frontend-design` | [anthropics/skills](https://github.com/anthropics/skills) — under `skills/<name>/` |
+| `humanizer`, `remove-ai-marks`, `clean-user-facing-text` | Source unknown — restore from `~/.claude/skills-archive/` |
 
 The Anthropic skills are `© 2025 Anthropic, PBC. All rights reserved.` They are
-linked, never vendored here.
+linked here, never copied in.
 
-The other three record no upstream anywhere on disk, and a search returns
-several unrelated projects with the same names. A guessed link would send a
-future reinstall to somebody else's skill, so the archive is the only pointer
-given.
+The other three record no source anywhere on disk, and searching those names
+returns several unrelated projects. A guessed link would send you to somebody
+else's skill, so only the archive path is given.
 
-## Credits
+### Tools this relies on
 
-- **[@ShaheerKhawaja](https://github.com/ShaheerKhawaja)** — the original
-  protocol system this is adapted from.
-- **[forrestchang](https://github.com/multica-ai/andrej-karpathy-skills)** —
-  the `karpathy-guidelines` skill, vendored under MIT.
-- **Andrej Karpathy** — the observations on LLM coding pitfalls that skill is
-  derived from.
+| Tool | For |
+|------|-----|
+| [Gitleaks](https://github.com/gitleaks/gitleaks) | Secret scanning (ID-203) |
+| [GitHub CLI](https://cli.github.com) | `gh` commands |
+| [jq](https://jqlang.github.io/jq/) | Reading JSON in the hooks |
 
-Vendored files and their exact upstream revisions are recorded in
-[NOTICE](NOTICE). Check for drift with `bash scripts/check-vendor-drift.sh`.
+---
+
+## More detail
+
+- [GITHUB-RULES.md](GITHUB-RULES.md) — every rule in full
+- [docs/INSTALLATION.md](docs/INSTALLATION.md) — what gets installed where
+- [docs/VERIFICATION.md](docs/VERIFICATION.md) — what the checks cover

@@ -116,6 +116,17 @@ whatever git already knows on that machine.
 | ID-402 | No private network addresses |
 | ID-403 | No `/Users/yourname/...` paths |
 | ID-404 | No personal email addresses |
+| ID-405 | No agent session links, and no AI credited as author |
+| ID-406 | Text you publish to GitHub is checked before it is posted |
+
+ID-405 exists because agent tools add a link to their own session
+transcript to commits and pull requests by default. That link is private, and it
+gets added without anyone choosing to add it.
+
+ID-406 checks the text of `gh pr create` and `gh issue create` before it is
+posted. A pull request body is the most public thing in the workflow and was the
+one place with no rule on it. Quoting a banned command in a body is fine — that
+is documentation. Carrying an address, a private path, or a session link is not.
 
 ID-401 reads its list of names from a file on your machine that is never
 uploaded. The list cannot live in this repository: publishing a list of things

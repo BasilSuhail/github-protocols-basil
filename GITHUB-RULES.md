@@ -228,6 +228,8 @@ the author turns off.
 | ID-301 | Subject must be a Conventional Commit |
 | ID-302 | Subject at most 72 characters |
 | ID-303 | No emoji in commit messages |
+| ID-405 | No agent session links or AI attribution |
+| ID-406 | Text published to GitHub is scanned for leaks |
 
 Every rule blocks. There are no advisory rules — an agent reads a warning and
 proceeds anyway, which is indistinguishable from having no rule.

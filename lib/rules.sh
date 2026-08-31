@@ -366,6 +366,61 @@ rule_no_personal_email() { # ID-404
 $found" "Commit under the noreply address only."
 }
 
+# Agent harnesses append a session identifier to commit messages and pull
+# request bodies by default. That URL points at a private transcript. It is the
+# single most common way a private link reaches a public repository, and it
+# arrives without anyone deciding to put it there.
+PROTOCOL_SESSION_RE='(claude\.ai/code/session[_-][A-Za-z0-9]|chatgpt\.com/(c|share)/[A-Za-z0-9]|Claude-Session:[[:space:]]*http|Generated with \[?(Claude|Codex|Copilot|Cursor)|Co-Authored-By:[[:space:]]*(Claude|Codex|Copilot|Cursor))'
+
+rule_no_session_links() { # ID-405
+  local text="$1"
+  printf '%s' "$text" | grep -qiE "$PROTOCOL_SESSION_RE" || return 0
+  _protocol_fail "ID-405" "Agent session link or AI attribution." \
+    "Commits and pull requests carry a single human author and no transcript link."
+}
+
+rule_no_session_links_in_files() { # ID-405
+  [ "$#" -eq 0 ] && return 0
+  local f keep=""
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    _protocol_is_attribution "$f" && continue
+    keep="$keep $f"
+  done
+  [ -z "$keep" ] && return 0
+  local hits
+  # shellcheck disable=SC2086
+  hits=$(grep -lEi "$PROTOCOL_SESSION_RE" $keep 2>/dev/null || true)
+  [ -z "$hits" ] && return 0
+  _protocol_fail "ID-405" "Agent session link in: $(echo "$hits" | tr '\n' ' ')"
+}
+
+# Text an agent publishes to GitHub. This is the most public surface in the
+# workflow and had no rule attached to it.
+#
+# Unlike every other command rule, this one reads the RAW command, heredocs
+# included, because a body is routinely supplied on standard input. It is
+# looking for what the text CONTAINS, not for what the command RUNS -- so a body
+# quoting a prohibited command stays allowed, which is the distinction #3
+# established and this must not undo.
+rule_gh_published_text() { # ID-406
+  local raw="$1"
+  _protocol_invocations "$raw" '^gh[[:space:]]+(pr|issue|release|gist)[[:space:]]+(create|edit|comment)' >/dev/null || return 0
+
+  local what=""
+  printf '%s' "$raw" | grep -qiE "$PROTOCOL_SESSION_RE"        && what="$what session-link"
+  printf '%s' "$raw" | grep -qEi "$PROTOCOL_PERSONAL_EMAIL_RE" && what="$what personal-email"
+  printf '%s' "$raw" | grep -qE  "$PROTOCOL_PRIVATE_IP_RE"     && what="$what private-ip"
+  printf '%s' "$raw" | grep -qE  "$PROTOCOL_LOCAL_PATH_RE" \
+    && ! printf '%s' "$raw" | grep -qE '/(Users|home)/(you|user|username|me|example)' \
+    && what="$what local-path"
+  printf '%s' "$raw" | grep -qE  "$PROTOCOL_SECRET_RE"         && what="$what secret"
+
+  [ -z "$what" ] && return 0
+  _protocol_fail "ID-406" "Publishing to GitHub with:$what" \
+    "Anything posted to a public repo is copied beyond recall. Remove it from the body."
+}
+
 # --- commit format ----------------------------------------------------------
 
 PROTOCOL_COMMIT_TYPES='feat|fix|refactor|docs|test|chore|ci|security|audit|session|perf|build|style|revert'
@@ -409,6 +464,7 @@ protocol_check_cmd() {
   rule_gh_requires_repo "$cmd"
   rule_never_merge "$cmd"
   rule_upstream_protection "$cmd"
+  rule_gh_published_text "$cmd"
 
   rule_no_coauthor "$cmd"
   rule_no_ai_attribution "$cmd"
@@ -433,6 +489,7 @@ protocol_check_msg() {
   rule_no_emoji "$text"
   rule_no_coauthor_text "$text"
   rule_no_ai_attribution_text "$text"
+  rule_no_session_links "$text"
 
   return "$PROTOCOL_VIOLATIONS"
 }
@@ -462,6 +519,8 @@ protocol_check_staged() {
     rule_no_local_paths $existing
     # shellcheck disable=SC2086
     rule_no_personal_email $existing
+    # shellcheck disable=SC2086
+    rule_no_session_links_in_files $existing
   fi
   rule_gitleaks_staged
 

@@ -25,6 +25,10 @@ OWNER="${PROTOCOL_OWNER:-$(git config --get protocol.owner 2>/dev/null)}"
 CI_MODE="${PROTOCOL_CI:-0}"
 machine_only() { [ "$CI_MODE" = "1" ] && return 1; return 0; }
 
+# Assembled at runtime: ID-405 matches an AI authorship trailer in any tracked
+# file, and the suite must not violate the rule it exists to test.
+TRAILER="Co-Authored-$(printf %s By): $(printf %s Claude) <noreply@$(printf %s anthropic).com>"
+
 PASS=0; FAIL=0
 ok()   { echo "  PASS: $1"; PASS=$((PASS+1)); }
 bad()  { echo "  FAIL: $1"; FAIL=$((FAIL+1)); }
@@ -62,7 +66,7 @@ bash -n "$PROTOCOL_LIB" 2>/dev/null && ok "lib/rules.sh parses" || bad "lib/rule
 echo ""
 
 echo "Claude Code adapter (real stdin JSON contract):"
-expect_cmd 2 "blocks Co-Authored-By"        'git commit -m "feat: x" --trailer "Co-Authored-By: Claude <noreply@anthropic.com>"'
+expect_cmd 2 "blocks Co-Authored-By"        "git commit -m 'feat: x' --trailer '$TRAILER'"
 expect_cmd 2 "blocks force push"            'git push --force origin main'
 expect_cmd 2 "blocks force-with-lease"      'git push --force-with-lease origin feat/x'
 expect_cmd 2 "blocks git add -A"            'git add -A'
@@ -91,6 +95,30 @@ expect_cmd 2 "still blocks a real force push after a safe one" \
   'git status && git push --force origin main'
 echo ""
 
+echo "Published text (ID-405, ID-406):"
+# The session-link fixtures are assembled at runtime. Writing one as a literal
+# would put a real transcript URL into a tracked file, which is the thing these
+# two rules exist to prevent.
+SESS="https://claude.%s/code/session_015ruUWtest"
+SESS=$(printf "$SESS" "ai")
+U="Users"
+expect_cmd 2 "blocks a session link in a PR body" \
+  "gh pr create --repo $OWNER/x --title y --body '$SESS'"
+expect_cmd 2 "blocks a session link in a heredoc body" \
+  "$(printf 'gh pr create --repo %s/x --title y --body-file - <<EOF\n%s\nEOF' "$OWNER" "$SESS")"
+expect_cmd 2 "blocks a home path in a PR body" \
+  "gh pr create --repo $OWNER/x --title y --body 'see /$U/alice/notes'"
+expect_cmd 0 "allows a placeholder path in a PR body" \
+  "gh pr create --repo $OWNER/x --title y --body 'see /$U/you/notes'"
+expect_cmd 0 "allows a PR body quoting a prohibited command" \
+  "gh pr create --repo $OWNER/x --title y --body 'never run git push --force'"
+expect_cmd 0 "allows a clean PR body" \
+  "gh pr create --repo $OWNER/x --title y --body 'Fixes the parser'"
+expect_msg 1 "blocks a session link in a commit message" \
+  "$(printf 'feat: x\n\n%s' "$SESS")"
+expect_msg 0 "allows a commit message without one" 'feat: x'
+echo ""
+
 echo "Claude Code adapter (non-Bash and malformed payloads):"
 echo '{"tool_name":"Read","tool_input":{"file_path":"/x"}}' | clean_env bash "$PTU" >/dev/null 2>&1 \
   && ok "ignores non-Bash tools" || bad "ignores non-Bash tools"
@@ -104,7 +132,7 @@ expect_msg 0 "allows issue reference"       'fix: #12 prevent null pointer in pa
 expect_msg 1 "blocks non-conventional"      'added some stuff'
 expect_msg 1 "blocks emoji"                 'feat: add sparkles 🚀'
 expect_msg 1 "blocks >72 char subject"      "feat: $(printf 'x%.0s' $(seq 1 80))"
-expect_msg 1 "blocks Co-Authored-By body"   "$(printf 'feat: x\n\nCo-Authored-By: Claude <noreply@anthropic.com>')"
+expect_msg 1 "blocks Co-Authored-By body"   "$(printf 'feat: x\n\n%s' "$TRAILER")"
 echo ""
 
 echo "Override guard (agents must never unblock themselves):"

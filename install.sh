@@ -137,6 +137,28 @@ if [ -d "$HOME/.claude" ]; then
   done
 fi
 
+if [ -d "$HOME/.claude/skills" ] && [ -f "$SCRIPT_DIR/skills.allowlist" ]; then
+  echo "6b. Applying skill allowlist"
+  ARCHIVE="$HOME/.claude/skills-archive"
+  moved=0
+  for dir in "$HOME"/.claude/skills/*/; do
+    [ -d "$dir" ] || continue
+    name=$(basename "$dir")
+    if grep -qE "^[[:space:]]*${name}[[:space:]]*$" "$SCRIPT_DIR/skills.allowlist"; then
+      continue
+    fi
+    # Archived, not deleted. Some of these have no upstream recorded anywhere,
+    # so a delete would be irreversible.
+    mkdir -p "$ARCHIVE"
+    rm -rf "${ARCHIVE:?}/$name"
+    mv "$dir" "$ARCHIVE/$name"
+    echo "   archived: $name"
+    moved=$((moved + 1))
+  done
+  [ "$moved" -eq 0 ] && echo "   nothing to archive" \
+    || echo "   $moved archived to $ARCHIVE (restore with mv)"
+fi
+
 if [ -d "$HOME/.cursor" ]; then
   echo "7. Cursor rules -> ~/.cursor/rules"
   mkdir -p "$HOME/.cursor/rules"

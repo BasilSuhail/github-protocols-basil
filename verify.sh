@@ -229,6 +229,24 @@ fi
 echo ""
 
 if machine_only; then
+echo "Skill allowlist:"
+if [ -f "$REPO_DIR/skills.allowlist" ]; then
+  extra=""
+  for dir in "$HOME"/.claude/skills/*/; do
+    [ -d "$dir" ] || continue
+    n=$(basename "$dir")
+    grep -qE "^[[:space:]]*${n}[[:space:]]*$" "$REPO_DIR/skills.allowlist" || extra="$extra $n"
+  done
+  [ -z "$extra" ] && ok "no unlisted skills installed" \
+                  || bad "unlisted skills present:$extra — re-run install.sh"
+  while read -r want; do
+    case "$want" in ''|\#*) continue ;; esac
+    [ -d "$HOME/.claude/skills/$want" ] && ok "allowlisted skill present: $want" \
+      || bad "allowlisted skill missing: $want"
+  done < "$REPO_DIR/skills.allowlist"
+fi
+echo ""
+
 echo "Vendored skills:"
 for sk in "$REPO_DIR"/skills/*/; do
   [ -d "$sk" ] || continue

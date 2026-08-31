@@ -1,0 +1,101 @@
+name: protocol
+
+# Server-side enforcement. Every other layer lives on one machine: hooks can be
+# stale, uninstalled, or simply absent on a second laptop, and they share a
+# filesystem with the agent they constrain. This runs where none of that is
+# true, at the point code actually reaches the remote.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  rules:
+    name: rule engine
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install gitleaks
+        run: |
+          curl -sSfL -o /tmp/gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Verify rules
+        env:
+          PROTOCOL_CI: "1"
+          PROTOCOL_OWNER: ${{ github.repository_owner }}
+        run: bash verify.sh
+
+  content:
+    name: leak scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan changed files
+        env:
+          PROTOCOL_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -uo pipefail
+          BASE="${{ github.event.pull_request.base.sha || 'HEAD~1' }}"
+          FILES=$(git diff --name-only --diff-filter=ACMR "$BASE"...HEAD | while read -r f; do
+            [ -f "$f" ] && printf '%s\n' "$f"
+          done)
+          if [ -z "$FILES" ]; then echo "No files to scan."; exit 0; fi
+          echo "Scanning:"; printf '  %s\n' $FILES
+
+          # shellcheck source=/dev/null
+          . lib/rules.sh
+          PROTOCOL_VIOLATIONS=0
+          # shellcheck disable=SC2086
+          rule_no_secrets_in_files $FILES
+          # shellcheck disable=SC2086
+          rule_no_env_files $FILES
+          # shellcheck disable=SC2086
+          rule_no_private_ips $FILES
+          # shellcheck disable=SC2086
+          rule_no_local_paths $FILES
+          # shellcheck disable=SC2086
+          rule_no_personal_email $FILES
+          # shellcheck disable=SC2086
+          rule_personal_identifiers $FILES
+
+          if [ "$PROTOCOL_VIOLATIONS" -gt 0 ]; then
+            echo "$PROTOCOL_VIOLATIONS violation(s). See GITHUB-RULES.md."
+            exit 1
+          fi
+          echo "Clean."
+
+  commits:
+    name: commit messages
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check every commit in the PR
+        run: |
+          set -uo pipefail
+          # shellcheck source=/dev/null
+          . lib/rules.sh
+          fail=0
+          for sha in $(git rev-list ${{ github.event.pull_request.base.sha }}..HEAD); do
+            msg=$(git log -1 --format=%B "$sha")
+            if ! protocol_check_msg "$msg"; then
+              echo "  in commit $(git log -1 --format='%h %s' "$sha")"
+              fail=1
+            fi
+          done
+          [ "$fail" -eq 0 ] && echo "All commit messages conform." || exit 1

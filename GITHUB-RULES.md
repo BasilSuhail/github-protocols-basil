@@ -232,6 +232,25 @@ the author turns off.
 Every rule blocks. There are no advisory rules — an agent reads a warning and
 proceeds anyway, which is indistinguishable from having no rule.
 
+### Server-side enforcement
+
+Every layer above lives on one machine. Hooks can be stale, uninstalled, or
+absent on a second laptop, and they share a filesystem with the agent they
+constrain. The ruleset on `main` is the one layer that is not negotiable from
+inside a session:
+
+| Rule | Effect |
+|------|--------|
+| Pull request required | No direct pushes to `main`, by anyone or anything |
+| Non-fast-forward blocked | Force pushes rejected at the remote |
+| Deletion blocked | `main` cannot be deleted |
+| Required status checks | `rule engine`, `leak scan`, `commit messages` must pass |
+
+Apply it with `bash scripts/apply-github-ruleset.sh` (needs admin). The CI
+workflow in `.github/workflows/protocol.yml` runs the same rule engine as the
+local hooks, so a machine with no hooks installed still cannot merge a
+violation.
+
 ### Overrides
 
 `PROTOCOL_OVERRIDE=<rule-id>` waives one rule for one command, and only from a

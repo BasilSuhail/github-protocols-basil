@@ -19,6 +19,12 @@ CMSG="$REPO_DIR/hooks/git-templates/commit-msg"
 [ -f "$HOME/.agents/protocol.conf" ] && . "$HOME/.agents/protocol.conf"
 OWNER="${PROTOCOL_OWNER:-$(git config --get protocol.owner 2>/dev/null)}"
 
+# CI runs the rules, not the machine. Installation state, global git config and
+# a developer's local screen are meaningless on a runner, and asserting them
+# there would make the suite fail for reasons unrelated to the rules.
+CI_MODE="${PROTOCOL_CI:-0}"
+machine_only() { [ "$CI_MODE" = "1" ] && return 1; return 0; }
+
 PASS=0; FAIL=0
 ok()   { echo "  PASS: $1"; PASS=$((PASS+1)); }
 bad()  { echo "  FAIL: $1"; FAIL=$((FAIL+1)); }
@@ -110,6 +116,7 @@ printf '{"tool_name":"Bash","tool_input":{"command":"git push --force origin fea
 [ $? -eq 0 ] && ok "honours override from a human shell" || bad "honours override from a human shell"
 echo ""
 
+if machine_only; then
 echo "Installed copies match this repo:"
 for pair in \
   "$HOME/.agents/lib/rules.sh:lib/rules.sh" \
@@ -122,6 +129,7 @@ for pair in \
   elif cmp -s "$dst" "$src"; then ok "$(basename "$dst") installed and current"
   else bad "$(basename "$dst") is STALE — re-run install.sh"; fi
 done
+fi
 echo ""
 
 echo "Identifier screen (ID-401):"
@@ -164,6 +172,7 @@ else
 fi
 echo ""
 
+if machine_only; then
 echo "This repo's own hooks (git init never overwrites):"
 RH="$REPO_DIR/$(git -C "$REPO_DIR" rev-parse --git-path hooks)"
 for h in pre-commit commit-msg pre-push; do
@@ -171,6 +180,7 @@ for h in pre-commit commit-msg pre-push; do
   elif cmp -s "$RH/$h" "$REPO_DIR/hooks/git-templates/$h"; then ok "$h is current"
   else bad "$h is STALE — bash scripts/refresh-repo-hooks.sh"; fi
 done
+fi
 echo ""
 
 echo "Leak rules (ID-402 to ID-404):"
@@ -215,6 +225,7 @@ else
 fi
 echo ""
 
+if machine_only; then
 echo "Vendored skills:"
 for sk in "$REPO_DIR"/skills/*/; do
   [ -d "$sk" ] || continue
@@ -227,15 +238,19 @@ for sk in "$REPO_DIR"/skills/*/; do
 done
 grep -q '^Revision:' "$REPO_DIR/NOTICE" 2>/dev/null \
   && ok "NOTICE records an upstream revision" || bad "NOTICE records an upstream revision"
+fi
 echo ""
 
+if machine_only; then
 echo "Global git config:"
 git config --global user.email 2>/dev/null | grep -q noreply.github.com \
   && ok "email is noreply" || bad "email is noreply"
 git config --global init.templateDir 2>/dev/null | grep -q git-templates \
   && ok "template dir set" || bad "template dir set"
+fi
 echo ""
 
+if machine_only; then
 echo "Claude Code registration:"
 if grep -q 'pretooluse.sh' "$HOME/.claude/settings.json" 2>/dev/null; then
   ok "pretooluse.sh registered in settings.json"
@@ -246,6 +261,7 @@ if grep -qE 'git-commit-guard|git-push-guard|self-review-gate' "$HOME/.claude/se
   bad "stale guard hooks still registered — remove them from settings.json"
 else
   ok "no stale guard hooks registered"
+fi
 fi
 echo ""
 

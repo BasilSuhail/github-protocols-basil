@@ -32,45 +32,53 @@ Identity is read from `~/.agents/protocol.conf`, which is never pushed.
 
 ### Protocols
 
-| ID | Rule |
-|----|------|
-| ID-001 | Commit address must end in `users.noreply.github.com` |
-| ID-002 | No `Co-Authored-By` line |
-| ID-003 | No AI credited as an author |
-| ID-101 | No `--no-verify` |
-| ID-102 | No force push |
-| ID-103 | No `git add -A` or `git add .` |
-| ID-104 | No `git reset --hard` or `git clean -f` |
-| ID-105 | Only touch repos you own |
-| ID-106 | `gh` commands must say `--repo` |
-| ID-107 | No committing straight to `main` |
-| ID-108 | Agents never merge |
-| ID-201 | No API keys, tokens or passwords in committed files |
-| ID-202 | No `.env`, credential or key files |
-| ID-203 | Gitleaks must find nothing |
-| ID-301 | Commit starts with `feat:`, `fix:`, `docs:`, `chore:` etc. |
-| ID-302 | First line 72 characters or fewer |
-| ID-303 | No emoji |
-| ID-401 | No personal names, institutions or contact details |
-| ID-402 | No private network addresses |
-| ID-403 | No `/Users/yourname/...` paths |
-| ID-404 | No personal email addresses |
-| ID-405 | No agent session links |
-| ID-406 | Text posted to GitHub is checked before it goes up |
+| Rule | Layer | Blocks? |
+|------|-------|---------|
+| Noreply email on all commits | All 3 | YES |
+| No Co-Authored-By trailers | Hook + Git | YES |
+| No AI credited as an author | Hook + Git | YES |
+| No `--no-verify` bypass | Hook | YES |
+| No force push | Hook + Git | YES |
+| No `git add -A` or `git add .` | Hook | YES |
+| No `git reset --hard` or `git clean -f` | Hook | YES |
+| No upstream repo interaction | Hook + Git | YES |
+| `gh` commands must say `--repo` | Hook | YES |
+| No committing straight to `main` | Git + CI | YES |
+| Agents never merge | Hook | YES |
+| No secrets in commits | Git + CI | YES |
+| No `.env` files committed | Git + CI | YES |
+| Gitleaks clean | Git + CI | YES |
+| Conventional commit format | Git + CI | YES |
+| Subject 72 characters or fewer | Git + CI | YES |
+| No emoji in commits | Git + CI | YES |
+| No personal names or institutions | Git + CI | YES |
+| No private network addresses | Git + CI | YES |
+| No home directory paths | Git + CI | YES |
+| No personal email addresses | Git + CI | YES |
+| No agent session links | Git + CI | YES |
+| Text posted to GitHub is scanned | Hook | YES |
 
 ### Skills
 
-| Skill | Purpose |
-|-------|---------|
-| `karpathy-guidelines` | think before coding, keep it simple, surgical edits, verify |
-| `xlsx` | spreadsheets — read, edit, create `.xlsx` and `.csv` |
-| `docx` | Word documents — read, edit, create `.docx` |
-| `pptx` | slide decks — read, edit, create `.pptx` |
-| `pdf` | PDFs — read, merge, split, fill forms, OCR |
-| `frontend-design` | build and style web interfaces |
-| `humanizer` | rewrite AI-sounding prose so it reads naturally |
-| `remove-ai-marks` | strip AI watermarks, invisible Unicode, C2PA metadata |
-| `clean-user-facing-text` | final text hygiene pass on prose for readers |
+| File | Purpose |
+|------|---------|
+| `AGENTS.md` | global agent contract |
+| `rules/agent-style.md` | `caveman`, `1:1:1`, `lesstalk` |
+| `rules/git-workflow.md` | branch, commit, PR, push rules |
+| `rules/completion-standard.md` | 100% completion rule |
+| `rules/code-quality.md` | test, docs, code hygiene |
+| `rules/karpathy-guidelines.md` | think first, keep it simple, surgical edits |
+| `skills/karpathy-guidelines/` | same rules as a Claude Code skill |
+| `lib/rules.sh` | the rule engine, all 23 rules |
+| `lib/personal-identifiers.example.sh` | template for the ID-401 term list |
+| `hooks/claude-code/pretooluse.sh` | blocks bad commands before they run |
+| `hooks/git-templates/pre-commit` | staged file safety |
+| `hooks/git-templates/commit-msg` | commit message format |
+| `hooks/git-templates/pre-push` | push target and force-push safety |
+| `.github/workflows/protocol.yml` | same rules, server side |
+| `templates/gitconfig` | git identity template |
+| `skills.allowlist` | which skills stay installed |
+| `protocol.conf.example` | identity template |
 
 ---
 

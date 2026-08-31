@@ -429,6 +429,11 @@ rule_conventional_subject() { # ID-301
   local subject="$1"
   echo "$subject" | grep -qE "^($PROTOCOL_COMMIT_TYPES)(\(.+\))?!?: .+" && return 0
   echo "$subject" | grep -qE '^(Merge|Revert) ' && return 0
+  # GitHub's web editor writes the subject itself -- "Update README.md" and the
+  # like -- and the person editing never sees a prompt for one. Rejecting those
+  # makes editing a file on github.com impossible, which is too high a price for
+  # a naming convention.
+  echo "$subject" | grep -qE '^(Update|Create|Delete|Rename) .+|^Add files via upload$' && return 0
   _protocol_fail "ID-301" "Subject is not a Conventional Commit: '$subject'" \
     "type(scope): description   types: $PROTOCOL_COMMIT_TYPES"
 }

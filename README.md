@@ -76,15 +76,15 @@ to `~/.claude/skills-archive/` — moved, never deleted. Bring one back with:
 mv ~/.claude/skills-archive/pdf ~/.claude/skills/pdf
 ```
 
-| Skill | Source | Credit |
-|-------|--------|--------|
-| Protocol system | [ShaheerKhawaja/github-protocols](https://github.com/ShaheerKhawaja) | [@ShaheerKhawaja](https://github.com/ShaheerKhawaja) |
-| `karpathy-guidelines` | [multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills) | forrestchang, from Andrej Karpathy's notes — MIT |
-| `xlsx` | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/xlsx) | Anthropic |
-| `docx` | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/docx) | Anthropic |
-| `pptx` | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/pptx) | Anthropic |
-| `pdf` | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/pdf) | Anthropic |
-| `frontend-design` | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/frontend-design) | Anthropic |
-| `humanizer` | [blader/humanizer](https://github.com/blader/humanizer) | blader |
-| `remove-ai-marks` | [haidrrrry/claude-watermark-remover](https://github.com/haidrrrry/claude-watermark-remover/tree/main/skills/remove-claude-marks) | haidrrrry |
-| `clean-user-facing-text` | [haidrrrry/claude-watermark-remover](https://github.com/haidrrrry/claude-watermark-remover/tree/main/skills/clean-user-facing-text) | haidrrrry |
+| Skill | In setup now | Source | Credit |
+|-------|--------------|--------|--------|
+| Protocol system | yes | [ShaheerKhawaja/github-protocols](https://github.com/ShaheerKhawaja) | [@ShaheerKhawaja](https://github.com/ShaheerKhawaja) |
+| `karpathy-guidelines` | yes | [multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills) | forrestchang, from Andrej Karpathy's notes — MIT |
+| `xlsx` | archived | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/xlsx) | Anthropic |
+| `docx` | archived | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/docx) | Anthropic |
+| `pptx` | archived | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/pptx) | Anthropic |
+| `pdf` | archived | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/pdf) | Anthropic |
+| `frontend-design` | archived | [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/frontend-design) | Anthropic |
+| `humanizer` | archived | [blader/humanizer](https://github.com/blader/humanizer) | blader |
+| `remove-ai-marks` | archived | [haidrrrry/claude-watermark-remover](https://github.com/haidrrrry/claude-watermark-remover/tree/main/skills/remove-claude-marks) | haidrrrry |
+| `clean-user-facing-text` | archived | [haidrrrry/claude-watermark-remover](https://github.com/haidrrrry/claude-watermark-remover/tree/main/skills/clean-user-facing-text) | haidrrrry |

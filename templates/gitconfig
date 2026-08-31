@@ -2,8 +2,9 @@
 # Copy relevant sections to ~/.gitconfig
 
 [user]
-	name = Basil Suhail
-	email = BasilSuhail@users.noreply.github.com
+	# Filled in by install.sh from ~/.agents/protocol.conf
+	name = Your Name
+	email = your-handle@users.noreply.github.com
 
 [init]
 	templateDir = ~/.git-templates

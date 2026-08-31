@@ -13,9 +13,38 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "Installing protocols from: $SCRIPT_DIR"
 echo ""
 
-echo "1. Global git config"
-git config --global user.name "Basil Suhail"
-git config --global user.email "BasilSuhail@users.noreply.github.com"
+echo "1. Identity"
+# Identity is not stored in this repository. It lives in an untracked config,
+# because the repo is public and a real name and address are precisely what
+# ID-401 to ID-404 exist to keep out of it.
+CONF="$HOME/.agents/protocol.conf"
+mkdir -p "$HOME/.agents"
+if [ ! -f "$CONF" ]; then
+  # Bootstrap from whatever git already knows, so a first run is not a form.
+  EXIST_NAME=$(git config --global user.name 2>/dev/null || true)
+  EXIST_EMAIL=$(git config --global user.email 2>/dev/null || true)
+  EXIST_OWNER="${EXIST_EMAIL%%@*}"
+  {
+    echo "# Written by install.sh. Untracked, never pushed."
+    echo "PROTOCOL_OWNER=\"${EXIST_OWNER:-your-github-handle}\""
+    echo "PROTOCOL_NAME=\"${EXIST_NAME:-Your Name}\""
+    echo "PROTOCOL_EMAIL=\"${EXIST_EMAIL:-your-github-handle@users.noreply.github.com}\""
+    echo "PROTOCOL_EMAIL_SUFFIX=\"users.noreply.github.com\""
+  } > "$CONF"
+  echo "   created $CONF from your existing git config — review it"
+fi
+# shellcheck source=/dev/null
+. "$CONF"
+
+if [ -z "${PROTOCOL_OWNER:-}" ] || [ "$PROTOCOL_OWNER" = "your-github-handle" ]; then
+  echo "   ERROR: set PROTOCOL_OWNER in $CONF before continuing." >&2
+  exit 1
+fi
+
+echo "2. Global git config"
+git config --global user.name "$PROTOCOL_NAME"
+git config --global user.email "$PROTOCOL_EMAIL"
+git config --global protocol.owner "$PROTOCOL_OWNER"
 git config --global init.templateDir "$HOME/.git-templates"
 git config --global push.default current
 git config --global push.autoSetupRemote true
@@ -24,7 +53,7 @@ git config --global commit.cleanup strip
 git config --global branch.sort -committerdate
 echo "   done"
 
-echo "2. Rule engine -> ~/.agents/lib/rules.sh"
+echo "3. Rule engine -> ~/.agents/lib/rules.sh"
 mkdir -p "$HOME/.agents/lib"
 cp "$SCRIPT_DIR/lib/rules.sh" "$HOME/.agents/lib/rules.sh"
 
@@ -45,7 +74,7 @@ fi
 [ -f "$SCREEN" ] || echo "   NOTE: no identifier screen (ID-401 inactive). See lib/personal-identifiers.example.sh"
 echo "   done"
 
-echo "3. Git hook templates -> ~/.git-templates/hooks"
+echo "4. Git hook templates -> ~/.git-templates/hooks"
 mkdir -p "$HOME/.git-templates/hooks"
 for h in pre-commit commit-msg pre-push; do
   cp "$SCRIPT_DIR/hooks/git-templates/$h" "$HOME/.git-templates/hooks/$h"
@@ -54,7 +83,7 @@ done
 echo "   done"
 
 if [ -d "$HOME/.claude" ]; then
-  echo "4. Claude Code adapter -> ~/.claude/hooks/pretooluse.sh"
+  echo "5. Claude Code adapter -> ~/.claude/hooks/pretooluse.sh"
   mkdir -p "$HOME/.claude/hooks"
   cp "$SCRIPT_DIR/hooks/claude-code/pretooluse.sh" "$HOME/.claude/hooks/pretooluse.sh"
   chmod +x "$HOME/.claude/hooks/pretooluse.sh"
@@ -93,25 +122,117 @@ if [ -d "$HOME/.claude" ]; then
     echo '         bash "$HOME/.claude/hooks/pretooluse.sh"'
   fi
 else
-  echo "4. Skipping Claude Code adapter (~/.claude not found)"
+  echo "5. Skipping Claude Code adapter (~/.claude not found)"
 fi
 
-echo "5. Universal agent rules -> ~/.agents/rules"
+if [ -d "$HOME/.claude" ]; then
+  echo "6. Skills -> ~/.claude/skills"
+  mkdir -p "$HOME/.claude/skills"
+  for skill in "$SCRIPT_DIR"/skills/*/; do
+    [ -d "$skill" ] || continue
+    name=$(basename "$skill")
+    mkdir -p "$HOME/.claude/skills/$name"
+    cp "$skill"SKILL.md "$HOME/.claude/skills/$name/SKILL.md"
+    echo "   installed skill: $name"
+  done
+fi
+
+if [ -d "$HOME/.claude/skills" ] && [ -f "$SCRIPT_DIR/skills.allowlist" ]; then
+  echo "6b. Applying skill allowlist"
+  ARCHIVE="$HOME/.claude/skills-archive"
+  moved=0
+  for dir in "$HOME"/.claude/skills/*/; do
+    [ -d "$dir" ] || continue
+    name=$(basename "$dir")
+    if grep -qE "^[[:space:]]*${name}[[:space:]]*$" "$SCRIPT_DIR/skills.allowlist"; then
+      continue
+    fi
+    # Archived, not deleted. Some of these have no upstream recorded anywhere,
+    # so a delete would be irreversible.
+    mkdir -p "$ARCHIVE"
+    rm -rf "${ARCHIVE:?}/$name"
+    mv "$dir" "$ARCHIVE/$name"
+    echo "   archived: $name"
+    moved=$((moved + 1))
+  done
+  [ "$moved" -eq 0 ] && echo "   nothing to archive" \
+    || echo "   $moved archived to $ARCHIVE (restore with mv)"
+fi
+
+if [ -d "$HOME/.cursor" ]; then
+  echo "7. Cursor rules -> ~/.cursor/rules"
+  mkdir -p "$HOME/.cursor/rules"
+  cp "$SCRIPT_DIR/rules/"*.mdc "$HOME/.cursor/rules/" 2>/dev/null || true
+  echo "   done"
+fi
+
+if [ -d "$HOME/.claude" ]; then
+  echo "7b. Deduplicating global agent config"
+  SETTINGS="$HOME/.claude/settings.json"
+  if [ -f "$SETTINGS" ] && command -v jq >/dev/null 2>&1; then
+    cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y%m%d%H%M%S)"
+    tmp=$(mktemp)
+    # Two UserPromptSubmit hooks restate what other layers already own. The
+    # caveman plugin's own mode tracker sets the response style, and a hardcoded
+    # override fights it every prompt -- which is why the level never sticks.
+    # The 1:1:1 reminder existed because nothing enforced it; ID-107 and ID-108
+    # now block direct commits to main and gh pr merge outright.
+    jq '
+      (.hooks.UserPromptSubmit //= [])
+      | .hooks.UserPromptSubmit |= map(
+          .hooks |= map(select(
+            (.command // "") | test("CAVEMAN|1:1:1 PROTOCOL") | not
+          ))
+        )
+      | .hooks.UserPromptSubmit |= map(select((.hooks | length) > 0))
+      # Drop SessionStart entries whose command is not installed.
+      | (.hooks.SessionStart //= [])
+      | .hooks.SessionStart |= map(
+          .hooks |= map(select((.command // "") | test("any-buddy") | not))
+        )
+      | .hooks.SessionStart |= map(select((.hooks | length) > 0))
+      | if (.hooks.UserPromptSubmit | length) == 0 then del(.hooks.UserPromptSubmit) else . end
+      | if (.hooks.SessionStart    | length) == 0 then del(.hooks.SessionStart)    else . end
+    ' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
+    echo "   settings.json deduplicated (backup written alongside it)"
+  fi
+
+  # A marked region in CLAUDE.md, rendered from the repo. Anything outside the
+  # markers is the user's and is never touched.
+  CMD_FILE="$HOME/.claude/CLAUDE.md"
+  BEGIN="<!-- BEGIN protocol (generated by install.sh) -->"
+  END="<!-- END protocol -->"
+  rendered=$(sed "s/@OWNER@/$PROTOCOL_OWNER/g" "$SCRIPT_DIR/templates/claude-md-block.tmpl")
+  touch "$CMD_FILE"
+  cp "$CMD_FILE" "$CMD_FILE.bak.$(date +%Y%m%d%H%M%S)"
+  tmp=$(mktemp)
+  {
+    awk -v b="$BEGIN" '$0 == b {exit} {print}' "$CMD_FILE"
+    printf '%s\n' "$BEGIN"
+    printf '%s\n' "$rendered"
+    printf '%s\n' "$END"
+    awk -v e="$END" 'found {print} $0 == e {found=1}' "$CMD_FILE"
+  } > "$tmp"
+  mv "$tmp" "$CMD_FILE"
+  echo "   CLAUDE.md protocol block rendered"
+fi
+
+echo "8. Universal agent rules -> ~/.agents/rules"
 mkdir -p "$HOME/.agents/rules"
 cp "$SCRIPT_DIR/rules/"*.md "$HOME/.agents/rules/"
 echo "   done"
 
 if [ -d "$HOME/.codex" ]; then
-  echo "6. Codex rules -> ~/.codex"
+  echo "9. Codex rules -> ~/.codex"
   mkdir -p "$HOME/.codex/rules"
   cp "$SCRIPT_DIR/rules/"*.md "$HOME/.codex/rules/"
   cp "$SCRIPT_DIR/AGENTS.md" "$HOME/.codex/AGENTS.md"
   echo "   done"
 else
-  echo "6. Skipping Codex rules (~/.codex not found)"
+  echo "9. Skipping Codex rules (~/.codex not found)"
 fi
 
-echo "7. Tooling"
+echo "10. Tooling"
 command -v gitleaks >/dev/null 2>&1 && echo "   gitleaks: $(gitleaks version 2>/dev/null)" \
   || echo "   gitleaks MISSING — brew install gitleaks"
 command -v jq >/dev/null 2>&1 && echo "   jq: $(jq --version)" \

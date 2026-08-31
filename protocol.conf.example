@@ -1,0 +1,22 @@
+# Protocol identity — EXAMPLE ONLY.
+#
+# Copy to ~/.agents/protocol.conf and fill in your own values:
+#
+#   cp protocol.conf.example ~/.agents/protocol.conf
+#
+# That destination is untracked and never pushed. Identity does not belong in
+# this file: the repository is public, and a real name, a real address and a
+# home directory path are exactly what ID-401 to ID-404 exist to keep out of it.
+#
+# The GitHub handle is the one exception. It is the repository URL, so hiding
+# it in file contents achieves nothing.
+
+# GitHub handle. Used by ID-105 to tell your repos from everyone else's.
+PROTOCOL_OWNER="your-github-handle"
+
+# Commit identity. Use the GitHub noreply address, never a personal one.
+PROTOCOL_NAME="Your Name"
+PROTOCOL_EMAIL="your-github-handle@users.noreply.github.com"
+
+# Every commit address must end in this. Leave as-is unless you self-host.
+PROTOCOL_EMAIL_SUFFIX="users.noreply.github.com"

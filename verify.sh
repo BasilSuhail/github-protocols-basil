@@ -15,6 +15,20 @@ export PROTOCOL_LIB="$REPO_DIR/lib/rules.sh"
 PTU="$REPO_DIR/hooks/claude-code/pretooluse.sh"
 CMSG="$REPO_DIR/hooks/git-templates/commit-msg"
 
+# The suite must not hardcode an identity either.
+[ -f "$HOME/.agents/protocol.conf" ] && . "$HOME/.agents/protocol.conf"
+OWNER="${PROTOCOL_OWNER:-$(git config --get protocol.owner 2>/dev/null)}"
+
+# CI runs the rules, not the machine. Installation state, global git config and
+# a developer's local screen are meaningless on a runner, and asserting them
+# there would make the suite fail for reasons unrelated to the rules.
+CI_MODE="${PROTOCOL_CI:-0}"
+machine_only() { [ "$CI_MODE" = "1" ] && return 1; return 0; }
+
+# Assembled at runtime: ID-405 matches an AI authorship trailer in any tracked
+# file, and the suite must not violate the rule it exists to test.
+TRAILER="Co-Authored-$(printf %s By): $(printf %s Claude) <noreply@$(printf %s anthropic).com>"
+
 PASS=0; FAIL=0
 ok()   { echo "  PASS: $1"; PASS=$((PASS+1)); }
 bad()  { echo "  FAIL: $1"; FAIL=$((FAIL+1)); }
@@ -52,7 +66,7 @@ bash -n "$PROTOCOL_LIB" 2>/dev/null && ok "lib/rules.sh parses" || bad "lib/rule
 echo ""
 
 echo "Claude Code adapter (real stdin JSON contract):"
-expect_cmd 2 "blocks Co-Authored-By"        'git commit -m "feat: x" --trailer "Co-Authored-By: Claude <noreply@anthropic.com>"'
+expect_cmd 2 "blocks Co-Authored-By"        "git commit -m 'feat: x' --trailer '$TRAILER'"
 expect_cmd 2 "blocks force push"            'git push --force origin main'
 expect_cmd 2 "blocks force-with-lease"      'git push --force-with-lease origin feat/x'
 expect_cmd 2 "blocks git add -A"            'git add -A'
@@ -64,21 +78,45 @@ expect_cmd 2 "blocks gh pr merge"           'gh pr merge 4 --squash'
 expect_cmd 2 "blocks gh create w/o --repo"  'gh issue create --title "x" --body "y"'
 expect_cmd 2 "blocks non-owned repo target" 'gh pr create --repo someoneelse/theirrepo --title x'
 expect_cmd 0 "allows clean commit"          'git commit -m "feat: add thing"'
-expect_cmd 0 "allows gh with --repo"        'gh issue create --repo BasilSuhail/x --title "y" --body "z"'
+expect_cmd 0 "allows gh with --repo"        "gh issue create --repo $OWNER/x --title y --body z"
 expect_cmd 0 "allows unrelated command"     'ls -la'
 echo ""
 
 echo "Payloads are data, not invocations (regression):"
 expect_cmd 0 "allows a force push quoted in a PR body" \
-  "gh pr create --repo BasilSuhail/x --title y --body 'run: git push --force origin main'"
+  "gh pr create --repo $OWNER/x --title y --body 'run: git push --force origin main'"
 expect_cmd 0 "allows a trailer quoted in a PR body" \
-  "gh pr create --repo BasilSuhail/x --title y --body 'never write Co-Authored-By: Someone'"
+  "gh pr create --repo $OWNER/x --title y --body 'never write Co-Authored-By: Someone'"
 expect_cmd 0 "allows reading a file that documents the rules" \
   'cat GITHUB-RULES.md'
 expect_cmd 0 "allows a heredoc body naming a blocked command" \
   "$(printf 'cat <<%s\ngit push --force origin main\nEOF' "EOF")"
 expect_cmd 2 "still blocks a real force push after a safe one" \
   'git status && git push --force origin main'
+echo ""
+
+echo "Published text (ID-405, ID-406):"
+# The session-link fixtures are assembled at runtime. Writing one as a literal
+# would put a real transcript URL into a tracked file, which is the thing these
+# two rules exist to prevent.
+SESS="https://claude.%s/code/session_015ruUWtest"
+SESS=$(printf "$SESS" "ai")
+U="Users"
+expect_cmd 2 "blocks a session link in a PR body" \
+  "gh pr create --repo $OWNER/x --title y --body '$SESS'"
+expect_cmd 2 "blocks a session link in a heredoc body" \
+  "$(printf 'gh pr create --repo %s/x --title y --body-file - <<EOF\n%s\nEOF' "$OWNER" "$SESS")"
+expect_cmd 2 "blocks a home path in a PR body" \
+  "gh pr create --repo $OWNER/x --title y --body 'see /$U/alice/notes'"
+expect_cmd 0 "allows a placeholder path in a PR body" \
+  "gh pr create --repo $OWNER/x --title y --body 'see /$U/you/notes'"
+expect_cmd 0 "allows a PR body quoting a prohibited command" \
+  "gh pr create --repo $OWNER/x --title y --body 'never run git push --force'"
+expect_cmd 0 "allows a clean PR body" \
+  "gh pr create --repo $OWNER/x --title y --body 'Fixes the parser'"
+expect_msg 1 "blocks a session link in a commit message" \
+  "$(printf 'feat: x\n\n%s' "$SESS")"
+expect_msg 0 "allows a commit message without one" 'feat: x'
 echo ""
 
 echo "Claude Code adapter (non-Bash and malformed payloads):"
@@ -94,7 +132,7 @@ expect_msg 0 "allows issue reference"       'fix: #12 prevent null pointer in pa
 expect_msg 1 "blocks non-conventional"      'added some stuff'
 expect_msg 1 "blocks emoji"                 'feat: add sparkles 🚀'
 expect_msg 1 "blocks >72 char subject"      "feat: $(printf 'x%.0s' $(seq 1 80))"
-expect_msg 1 "blocks Co-Authored-By body"   "$(printf 'feat: x\n\nCo-Authored-By: Claude <noreply@anthropic.com>')"
+expect_msg 1 "blocks Co-Authored-By body"   "$(printf 'feat: x\n\n%s' "$TRAILER")"
 echo ""
 
 echo "Override guard (agents must never unblock themselves):"
@@ -106,6 +144,7 @@ printf '{"tool_name":"Bash","tool_input":{"command":"git push --force origin fea
 [ $? -eq 0 ] && ok "honours override from a human shell" || bad "honours override from a human shell"
 echo ""
 
+if machine_only; then
 echo "Installed copies match this repo:"
 for pair in \
   "$HOME/.agents/lib/rules.sh:lib/rules.sh" \
@@ -118,6 +157,7 @@ for pair in \
   elif cmp -s "$dst" "$src"; then ok "$(basename "$dst") installed and current"
   else bad "$(basename "$dst") is STALE — re-run install.sh"; fi
 done
+fi
 echo ""
 
 echo "Identifier screen (ID-401):"
@@ -148,10 +188,12 @@ else
   bad "absent screen is inactive, not a failure"
 fi
 rm -rf "$SCREEN_TMP"
-if [ -f "$HOME/.agents/lib/personal-identifiers.sh" ]; then
-  ok "a real screen is installed on this machine"
-else
-  bad "no screen at ~/.agents/lib/personal-identifiers.sh — ID-401 is inactive"
+if machine_only; then
+  if [ -f "$HOME/.agents/lib/personal-identifiers.sh" ]; then
+    ok "a real screen is installed on this machine"
+  else
+    bad "no screen at ~/.agents/lib/personal-identifiers.sh — ID-401 is inactive"
+  fi
 fi
 if git ls-files --error-unmatch lib/personal-identifiers.sh >/dev/null 2>&1; then
   bad "a real screen is TRACKED — it must never be committed"
@@ -160,6 +202,7 @@ else
 fi
 echo ""
 
+if machine_only; then
 echo "This repo's own hooks (git init never overwrites):"
 RH="$REPO_DIR/$(git -C "$REPO_DIR" rev-parse --git-path hooks)"
 for h in pre-commit commit-msg pre-push; do
@@ -167,13 +210,117 @@ for h in pre-commit commit-msg pre-push; do
   elif cmp -s "$RH/$h" "$REPO_DIR/hooks/git-templates/$h"; then ok "$h is current"
   else bad "$h is STALE — bash scripts/refresh-repo-hooks.sh"; fi
 done
+fi
 echo ""
 
+echo "Leak rules (ID-402 to ID-404):"
+LK=$(mktemp -d)
+# Fixtures are assembled at runtime. Writing them as literals would put a
+# private IP, a home directory path and a personal address into this tracked
+# file -- the exact strings these rules exist to keep out of the repository.
+# The suite's own fixtures must not violate the suite.
+printf 'host 192.%s.1.44 is the box\n' "168"        > "$LK/ip.txt"
+printf 'see /%s/alice/folders/thing\n'  "Users"     > "$LK/path.txt"
+printf 'mail me at alice@%s.com\n'      "gmail"     > "$LK/mail.txt"
+printf 'credit: alice@%s.com for this\n' "gmail"    > "$LK/NOTICE"
+printf 'host 8.8.8.8 and /%s/you/x\n'   "Users"     > "$LK/ok.txt"
+
+leak() { # <rule> <file> <expected 0 pass|1 block> <desc>
+  local got
+  clean_env bash -c ". '$PROTOCOL_LIB'; $1 '$LK/$2'" >/dev/null 2>&1; got=$?
+  [ "$got" -eq "$3" ] && ok "$4" || bad "$4 (want $3, got $got)"
+}
+leak rule_no_private_ips    ip.txt    1 "blocks a private IP"
+leak rule_no_local_paths    path.txt  1 "blocks a home directory path"
+leak rule_no_personal_email mail.txt  1 "blocks a personal email"
+leak rule_no_personal_email NOTICE    0 "allows a personal email in NOTICE"
+leak rule_no_private_ips    ok.txt    0 "allows a public IP"
+leak rule_no_local_paths    ok.txt    0 "allows a placeholder path"
+rm -rf "$LK"
+echo ""
+
+echo "Identity is not hardcoded:"
+if grep -rIqE '[A-Za-z0-9._%+-]+@(gmail|outlook|hotmail|yahoo|icloud|proton)\.' \
+     --exclude-dir=.git --exclude=NOTICE --exclude=verify.sh "$REPO_DIR"; then
+  bad "no personal email address is tracked"
+else
+  ok "no personal email address is tracked"
+fi
+[ -n "$OWNER" ] && ok "PROTOCOL_OWNER resolved ($OWNER)" || bad "PROTOCOL_OWNER resolved"
+machine_only && { [ -f "$HOME/.agents/protocol.conf" ] \
+  && ok "protocol.conf exists" || bad "protocol.conf exists"; }
+if git -C "$REPO_DIR" ls-files --error-unmatch protocol.conf >/dev/null 2>&1; then
+  bad "protocol.conf is TRACKED — it must never be committed"
+else
+  ok "protocol.conf is not tracked"
+fi
+echo ""
+
+if machine_only; then
+echo "Skill allowlist:"
+if [ -f "$REPO_DIR/skills.allowlist" ]; then
+  extra=""
+  for dir in "$HOME"/.claude/skills/*/; do
+    [ -d "$dir" ] || continue
+    n=$(basename "$dir")
+    grep -qE "^[[:space:]]*${n}[[:space:]]*$" "$REPO_DIR/skills.allowlist" || extra="$extra $n"
+  done
+  [ -z "$extra" ] && ok "no unlisted skills installed" \
+                  || bad "unlisted skills present:$extra — re-run install.sh"
+  while read -r want; do
+    case "$want" in ''|\#*) continue ;; esac
+    [ -d "$HOME/.claude/skills/$want" ] && ok "allowlisted skill present: $want" \
+      || bad "allowlisted skill missing: $want"
+  done < "$REPO_DIR/skills.allowlist"
+fi
+echo ""
+
+echo "Vendored skills:"
+for sk in "$REPO_DIR"/skills/*/; do
+  [ -d "$sk" ] || continue
+  n=$(basename "$sk")
+  d="$HOME/.claude/skills/$n/SKILL.md"
+  if [ ! -f "$d" ]; then bad "skill $n installed"
+  elif cmp -s "$d" "$sk/SKILL.md"; then ok "skill $n installed and current"
+  else bad "skill $n is STALE — re-run install.sh"; fi
+  head -5 "$sk/SKILL.md" | grep -q '^name:' && ok "skill $n has frontmatter" || bad "skill $n has frontmatter"
+done
+grep -q '^Revision:' "$REPO_DIR/NOTICE" 2>/dev/null \
+  && ok "NOTICE records an upstream revision" || bad "NOTICE records an upstream revision"
+fi
+echo ""
+
+if machine_only; then
 echo "Global git config:"
 git config --global user.email 2>/dev/null | grep -q noreply.github.com \
   && ok "email is noreply" || bad "email is noreply"
 git config --global init.templateDir 2>/dev/null | grep -q git-templates \
   && ok "template dir set" || bad "template dir set"
+fi
+echo ""
+
+if machine_only; then
+echo "Global config is deduplicated:"
+S="$HOME/.claude/settings.json"
+if grep -qE 'CAVEMAN|1:1:1 PROTOCOL' "$S" 2>/dev/null; then
+  bad "no hand-rolled style hooks (the caveman plugin owns response style)"
+else
+  ok "no hand-rolled style hooks (the caveman plugin owns response style)"
+fi
+if grep -q 'any-buddy' "$S" 2>/dev/null; then
+  bad "no SessionStart hook pointing at an uninstalled binary"
+else
+  ok "no SessionStart hook pointing at an uninstalled binary"
+fi
+CMD_FILE="$HOME/.claude/CLAUDE.md"
+N=$(grep -c 'BEGIN protocol (generated' "$CMD_FILE" 2>/dev/null || echo 0)
+[ "$N" = "1" ] && ok "CLAUDE.md has exactly one generated block" \
+                || bad "CLAUDE.md has $N generated blocks, expected 1"
+if [ -f "$CMD_FILE" ]; then
+  EXPECT=$(sed "s/@OWNER@/$OWNER/g" "$REPO_DIR/templates/claude-md-block.tmpl")
+  GOT=$(awk '/BEGIN protocol \(generated/{f=1;next} /END protocol/{f=0} f' "$CMD_FILE")
+  [ "$EXPECT" = "$GOT" ] && ok "generated block is current" || bad "generated block is STALE — re-run install.sh"
+fi
 echo ""
 
 echo "Claude Code registration:"
@@ -186,6 +333,7 @@ if grep -qE 'git-commit-guard|git-push-guard|self-review-gate' "$HOME/.claude/se
   bad "stale guard hooks still registered — remove them from settings.json"
 else
   ok "no stale guard hooks registered"
+fi
 fi
 echo ""
 

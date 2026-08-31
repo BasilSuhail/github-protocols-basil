@@ -1,256 +1,238 @@
-# GitHub Protocols Basil
+# GitHub Protocols
 
-Universal GitHub workflow pack for Basil-first, fork-safe development.
-Built from Shaheer's protocol system.
-Retargeted for `BasilSuhail/*`.
-Extended with Basil agent rules.
+Rules for AI coding tools. They block bad commits instead of asking nicely.
 
----
-
-## Table Of Contents
-
-1. [What This Is](#what-this-is)
-2. [Basil Additions](#basil-additions)
-3. [Architecture](#architecture)
-4. [Directory Structure](#directory-structure)
-5. [Quick Install](#quick-install)
-6. [Repo Rules](#repo-rules)
-7. [Recommended Flow](#recommended-flow)
-8. [Rule Files](#rule-files)
-9. [What Changed From Shaheer Version](#what-changed-from-shaheer-version)
-10. [What Gets Enforced](#what-gets-enforced-autonomously)
-11. [Completion Standard](#completion-standard)
+Works with Claude Code, Codex, Cursor, and anything else that runs `git`.
 
 ---
 
-## What This Is
+## How to install
 
-A single source of truth for git workflow enforcement across:
-- **Claude Code** (direct harness)
-- **Codex** (CLI + app)
-- **OpenCode**, **Cursor**, **Gemini CLI**, **Windsurf**, **Continue.dev**
-- **Any `.agents/`-compatible tool** following the [amplified.dev](https://amplified.dev) standard
+You run these in a terminal. You have two options.
 
-Use this when goal is:
-- keep all work on `BasilSuhail/*`
-- block accidental upstream PRs and pushes
-- enforce Basil identity
-- enforce short caveman-style agent output
-- enforce `1:1:1`
-
----
-
-## Basil Additions
-
-### 1. Caveman
-- short, 3-6 word sentences
-- low fluff
-- drop articles when possible
-- compress hard
-
-### 2. 1:1:1
-- 1 issue
-- 1 branch
-- 1 PR
-- 1 commit
-- always branch
-- always PR
-- never self-merge
-- Basil merges
-
-### 3. lesstalk
-- tools first
-- result next
-- stop
-- no narration unless asked
-
-### 4. Fork-Safe GitHub
-- default owner = `BasilSuhail`
-- explicit `--repo BasilSuhail/<repo>`
-- treat non-Basil remotes as upstream unless user overrides
-- block upstream push patterns in hooks
-
----
-
-## Architecture
+**Inside Claude Code** — start your message with `!`, then the command:
 
 ```
-3-Layer Defense
-===============
-
-Layer 1: Global Git Config (~/.gitconfig)
-  - Basil noreply email globally enforced
-  - Template dir auto-applies hooks to new repos
-  - Push/pull defaults
-
-Layer 2: Claude Code Hooks (~/.claude/settings.json)
-  - git-commit-guard.sh — blocks PII, Co-Authored-By, --no-verify
-  - git-push-guard.sh — blocks force push, upstream leaks, --no-verify
-  - self-review-gate.sh — advisory 100% completion reminder
-
-Layer 3: Git Hook Templates (~/.git-templates/hooks/)
-  - pre-commit — email, secrets, PII, Gitleaks, linting
-  - pre-push — force push, upstream protection, Gitleaks
-
-Layer 4: Agent Rules (~/.codex, ~/.agents, repo AGENTS.md)
-  - Basil identity
-  - Basil fork safety
-  - caveman
-  - 1:1:1
-  - lesstalk
+!bash verify.sh
 ```
 
----
+It runs immediately and the output appears in the conversation. Easiest, because
+you are already in the right folder.
 
-## Directory Structure
+**Or a normal terminal** — press `Cmd+Space`, type `Terminal`, press Enter.
 
-```
-github-protocols-basil/
-  AGENTS.md                    # Universal rules (auto-loaded by Codex/agents)
-  rules/
-    agent-style.md             # Caveman, 1:1:1, lesstalk
-    git-workflow.md            # Git workflow enforcement rules
-    completion-standard.md     # 100% completion standard
-    code-quality.md            # Code quality standards
-  hooks/
-    claude-code/
-      git-commit-guard.sh      # Claude Code PreToolUse hook
-      git-push-guard.sh        # Claude Code PreToolUse hook
-      self-review-gate.sh      # Claude Code PreToolUse hook
-    git-templates/
-      pre-commit               # Global git pre-commit hook
-      pre-push                 # Global git pre-push hook
-  templates/
-    gitconfig                  # Global git config template
-    pre-commit-config.yaml     # Pre-commit framework config
-    gitleaks.toml              # Gitleaks configuration
-  docs/
-    INSTALLATION.md            # Step-by-step setup guide
-    VERIFICATION.md            # How to verify everything works
-```
+Two commands are worth knowing. `cd <folder>` moves you into a folder.
+`bash <file>` runs a file.
 
----
-
-## Quick Install
+### Install
 
 ```bash
-# 1. Clone this repo
-git clone git@github.com:BasilSuhail/github-protocols-basil.git ~/github-protocols-basil
-
-# 2. Run the installer
-bash ~/github-protocols-basil/install.sh
-
-# 3. Verify
-bash ~/github-protocols-basil/verify.sh
+cd ~/folders/github-protocols-basil
+bash install.sh
+bash verify.sh
 ```
 
-Install targets:
-- `~/.codex/AGENTS.md`
-- `~/.codex/rules/*.md`
-- `~/.agents/rules/*.md`
-- `~/.git-templates/hooks/*`
-- optional `~/.claude/hooks/*`
+`verify.sh` should end with `ALL SYSTEMS OPERATIONAL`. If it does not, it prints
+one line per problem saying what is wrong.
 
----
+Run `install.sh` again any time. It is safe to repeat — it overwrites its own
+files and leaves yours alone.
 
-## Repo Rules
+### Two things to do once
 
-- Owner: `BasilSuhail`
-- Identity: `Basil Suhail <BasilSuhail@users.noreply.github.com>`
-- Never push directly to upstream
-- Never create PRs on upstream by default
-- Always verify target repo before `gh` commands
-- Prefer branch naming: `feat/<slug>`, `fix/<slug>`, `docs/<slug>`
-- Squash to `main`
-
----
-
-## Recommended Flow
+Repositories you already have keep their old hooks. Git only copies a hook into
+a repository that does not already have one, and never replaces an existing one,
+so old repositories quietly keep running whatever they were set up with:
 
 ```bash
-# 1. pick issue
-gh issue list --repo BasilSuhail/<repo>
-
-# 2. branch
-git checkout -b fix/<slug>
-
-# 3. work
-# 4. test
-# 5. commit once
-
-# 6. push to Basil fork only
-git push -u origin fix/<slug>
-
-# 7. open PR on Basil fork only
-gh pr create --repo BasilSuhail/<repo> --base main --head fix/<slug>
+bash scripts/refresh-repo-hooks.sh --all ~/folders
 ```
 
----
+Then protect `main` on GitHub, so the rules hold even from a machine that has
+none of this installed. Needs admin on the repository:
 
-## Rule Files
+```bash
+bash scripts/apply-github-ruleset.sh
+```
 
-| File | Purpose |
-|------|---------|
-| `AGENTS.md` | Global agent contract for Basil workflow |
-| `rules/agent-style.md` | `caveman`, `1:1:1`, `lesstalk` |
-| `rules/git-workflow.md` | branch, commit, PR, push rules |
-| `rules/completion-standard.md` | 100% completion rule |
-| `rules/code-quality.md` | test, docs, code hygiene |
-| `hooks/claude-code/git-commit-guard.sh` | blocks bad commit patterns |
-| `hooks/claude-code/git-push-guard.sh` | blocks bad push targets |
-| `hooks/git-templates/pre-commit` | repo-local pre-commit safety |
-| `hooks/git-templates/pre-push` | repo-local pre-push safety |
-| `templates/gitconfig` | Basil git identity template |
-| `docs/INSTALLATION.md` | setup instructions |
-| `docs/VERIFICATION.md` | post-install checks |
+### Setting up a second machine
 
----
+```bash
+git clone https://github.com/BasilSuhail/github-protocols-basil.git
+cd github-protocols-basil
+bash install.sh
+```
 
-## What Changed From Shaheer Version
-
-- owner changed to `BasilSuhail`
-- identity changed to Basil noreply
-- upstream protection retargeted to Basil-first workflow
-- `agent-style.md` added
-- `caveman` added
-- `1:1:1` added
-- `lesstalk` added
-- install docs retargeted
-- hook messages retargeted
-- README retargeted
+Your name and email are not in this repository. They live in
+`~/.agents/protocol.conf`, which is never uploaded. `install.sh` creates it from
+whatever git already knows on that machine.
 
 ---
 
-## What Gets Enforced (Autonomously)
+## Protocol list
 
-| Rule | Layer | Blocks? |
-|------|-------|---------|
-| Noreply email on all commits | All 3 | YES |
-| No Co-Authored-By trailers | Layer 2 | YES |
-| No personal email in commits | All 3 | YES |
-| No `--no-verify` bypass | Layer 2+3 | YES |
-| No force push | Layer 2+3 | YES |
-| No upstream repo interaction | Layer 2+3 | YES |
-| No secrets in commits | Layer 3 | YES |
-| No `.env` files committed | Layer 3 | YES |
-| Conventional commit format | Layer 2 | WARNING |
-| No `git add -A` | Layer 2 | WARNING |
-| Self-review before push | Layer 2 | ADVISORY |
-| 100% completion standard | Rules | ADVISORY |
-| Spec update with source changes | Layer 3 | ADVISORY |
-| Caveman / lesstalk / 1:1:1 | Rules | YES |
+### Identity
+
+| ID | Rule |
+|----|------|
+| ID-001 | Commit address must end in `users.noreply.github.com` |
+| ID-002 | No `Co-Authored-By` line |
+| ID-003 | No AI credited as an author |
+
+### Safety
+
+| ID | Rule |
+|----|------|
+| ID-101 | No `--no-verify` (that flag skips these checks) |
+| ID-102 | No force push |
+| ID-103 | No `git add -A` or `git add .` — name the files you mean |
+| ID-104 | No `git reset --hard` or `git clean -f` |
+| ID-105 | Only touch repositories you own |
+| ID-106 | `gh` commands must say `--repo`, so they cannot hit the wrong one |
+| ID-107 | No committing straight to `main` |
+| ID-108 | Agents never merge. You merge |
+
+### Secrets
+
+| ID | Rule |
+|----|------|
+| ID-201 | No API keys, tokens or passwords in committed files |
+| ID-202 | No `.env`, credential or key files |
+| ID-203 | Gitleaks must find nothing |
+
+### Commit messages
+
+| ID | Rule |
+|----|------|
+| ID-301 | Start with a type: `feat:`, `fix:`, `docs:`, `chore:`, and so on |
+| ID-302 | First line 72 characters or fewer |
+| ID-303 | No emoji |
+
+### Private information
+
+| ID | Rule |
+|----|------|
+| ID-401 | No personal names, institutions or contact details |
+| ID-402 | No private network addresses |
+| ID-403 | No `/Users/yourname/...` paths |
+| ID-404 | No personal email addresses |
+| ID-405 | No agent session links, and no AI credited as author |
+| ID-406 | Text you publish to GitHub is checked before it is posted |
+
+ID-405 exists because agent tools add a link to their own session
+transcript to commits and pull requests by default. That link is private, and it
+gets added without anyone choosing to add it.
+
+ID-406 checks the text of `gh pr create` and `gh issue create` before it is
+posted. A pull request body is the most public thing in the workflow and was the
+one place with no rule on it. Quoting a banned command in a body is fine — that
+is documentation. Carrying an address, a private path, or a session link is not.
+
+ID-401 reads its list of names from a file on your machine that is never
+uploaded. The list cannot live in this repository: publishing a list of things
+you want kept private publishes them.
+
+### When a rule blocks you
+
+You see this, and the command does not run:
+
+```
+BLOCKED [ID-103] Blanket staging is prohibited — it sweeps in .env, keys, and binaries.
+         Fix: Stage explicit paths: git add path/to/file
+```
+
+Do what the `Fix:` line says. Every rule blocks; none of them are warnings you
+can ignore, because a warning is something an agent reads and then does anyway.
+
+If a block is genuinely wrong, waive that one rule for that one command. This
+only works when you type it yourself — it is refused inside an AI session, so an
+agent can never switch off a rule that is stopping it:
+
+```bash
+PROTOCOL_OVERRIDE=ID-102 git push --force-with-lease origin my-branch
+```
+
+### Where the rules are enforced
+
+| Where | Covers | Can it be skipped? |
+|-------|--------|--------------------|
+| Claude Code, before a command runs | Claude Code only | Yes, on this machine |
+| Git, at commit and push | Every tool | Yes, on this machine |
+| GitHub Actions, on every push | Everything | No |
+| GitHub ruleset on `main` | Everything | No |
+
+The first two catch mistakes early. The last two are the ones that still work on
+a machine where nothing is installed.
+
+### Working agreement
+
+One issue, one branch, one pull request. Agents open pull requests. You merge.
 
 ---
 
-## Completion Standard
+## Skills
 
-Every task must be completed to 100%. No 80% work. Self-review is mandatory before every push.
-See `rules/completion-standard.md` for the full protocol.
+A skill's description loads every session; its instructions only load when it is
+actually used. Check with `claude plugin details <plugin>` — it shows `always-on`
+next to `on-invoke`. A large skill sitting unused costs very little, so trimming
+skills is about having a shorter list to choose from, not about saving space.
+
+`skills.allowlist` lists which skills stay in `~/.claude/skills/`. `install.sh`
+moves the rest to `~/.claude/skills-archive/`. Moved, never deleted. To bring
+one back:
+
+```bash
+mv ~/.claude/skills-archive/pdf ~/.claude/skills/pdf
+```
+
+Skills that come from a plugin cannot be removed one at a time — a plugin
+installs all of its skills together or none of them.
 
 ---
 
-## Attribution
+## Links and credits
 
-This repo is adapted from protocol work created by [@ShaheerKhawaja](https://github.com/ShaheerKhawaja).
-Base system, structure, and original protocol direction came from his `github-protocols` project.
-This Basil version retargets that work for `BasilSuhail/*` workflow, Basil identity, and Basil-specific agent rules.
+### The protocol system
+
+**[@ShaheerKhawaja](https://github.com/ShaheerKhawaja)** — the original protocol
+system this is adapted from.
+
+### Vendored into this repository
+
+| What | Author | Source |
+|------|--------|--------|
+| `karpathy-guidelines` skill | forrestchang, MIT | [multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills) |
+
+Derived from **Andrej Karpathy's** observations on where AI coding goes wrong.
+The exact version copied is recorded in [NOTICE](NOTICE). Check it still matches
+upstream with `bash scripts/check-vendor-drift.sh`.
+
+### Archived skills, and where to get them again
+
+| Skill | Source |
+|-------|--------|
+| `xlsx`, `docx`, `pptx`, `pdf`, `frontend-design` | [anthropics/skills](https://github.com/anthropics/skills) — under `skills/<name>/` |
+| `humanizer`, `remove-ai-marks`, `clean-user-facing-text` | Source unknown — restore from `~/.claude/skills-archive/` |
+
+The Anthropic skills are `© 2025 Anthropic, PBC. All rights reserved.` They are
+linked here, never copied in.
+
+The other three record no source anywhere on disk, and searching those names
+returns several unrelated projects. A guessed link would send you to somebody
+else's skill, so only the archive path is given.
+
+### Tools this relies on
+
+| Tool | For |
+|------|-----|
+| [Gitleaks](https://github.com/gitleaks/gitleaks) | Secret scanning (ID-203) |
+| [GitHub CLI](https://cli.github.com) | `gh` commands |
+| [jq](https://jqlang.github.io/jq/) | Reading JSON in the hooks |
+
+---
+
+## More detail
+
+- [GITHUB-RULES.md](GITHUB-RULES.md) — every rule in full
+- [docs/INSTALLATION.md](docs/INSTALLATION.md) — what gets installed where
+- [docs/VERIFICATION.md](docs/VERIFICATION.md) — what the checks cover

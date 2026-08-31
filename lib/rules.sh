@@ -12,11 +12,33 @@
 #   ID-1xx  safety
 #   ID-2xx  secrets
 #   ID-3xx  commit format
-#   ID-4xx  leak / personal identifiers
+#   ID-4xx  leak / personal identifiers / PII
+
+# Identity lives in an untracked config, not in this file. The handle is
+# unavoidable -- it is the repository URL -- but a real name, a real address and
+# a home directory path are not, and this file is public.
+PROTOCOL_CONF="${PROTOCOL_CONF:-$HOME/.agents/protocol.conf}"
+if [ -f "$PROTOCOL_CONF" ]; then
+  # shellcheck source=/dev/null
+  . "$PROTOCOL_CONF"
+fi
 
 PROTOCOL_EMAIL_SUFFIX="${PROTOCOL_EMAIL_SUFFIX:-users.noreply.github.com}"
-PROTOCOL_OWNER="${PROTOCOL_OWNER:-BasilSuhail}"
+# `git config --get` exits 1 when the key is unset. Under `set -e` -- which is
+# how GitHub Actions runs every step -- that aborts the shell the moment this
+# file is sourced, taking the whole job down before a single rule runs.
+PROTOCOL_OWNER="${PROTOCOL_OWNER:-$(git config --get protocol.owner 2>/dev/null || true)}"
 PROTOCOL_OVERRIDE_LOG="${PROTOCOL_OVERRIDE_LOG:-$HOME/.agents/override.log}"
+
+# Files that name people on purpose. Attribution is the point of a NOTICE and
+# of a credits section, and a licence that requires attribution cannot be
+# honoured by a repo whose own rules forbid it. Exempt from the identity rules
+# only -- never from the secret rules.
+PROTOCOL_ATTRIBUTION_RE="${PROTOCOL_ATTRIBUTION_RE:-(^|/)(NOTICE|LICENSE|LICENCE|AUTHORS|CREDITS)(\\.[a-z]+)?$}"
+
+_protocol_is_attribution() {
+  printf '%s' "$1" | grep -qE "$PROTOCOL_ATTRIBUTION_RE"
+}
 
 PROTOCOL_VIOLATIONS=0
 
@@ -195,6 +217,11 @@ rule_upstream_protection() { # ID-105
     segs=$(_protocol_invocations "$target" '^(git|gh)[[:space:]]') || return 0
   fi
   printf '%s' "$segs" | grep -qiE 'github\.com[:/]|--repo[= ]|git@' || return 0
+  if [ -z "$PROTOCOL_OWNER" ]; then
+    _protocol_fail "ID-105" "PROTOCOL_OWNER is not set, so no repo can be recognised as yours." \
+      "Set it in $PROTOCOL_CONF (see protocol.conf.example)"
+    return
+  fi
   printf '%s' "$segs" | grep -qi "$PROTOCOL_OWNER" && return 0
   _protocol_fail "ID-105" "Target does not name $PROTOCOL_OWNER — refusing to touch a non-owned repo." \
     "Use $PROTOCOL_OWNER forks only."
@@ -258,7 +285,13 @@ rule_gitleaks_staged() { # ID-203
 # how to find and call it. See lib/personal-identifiers.example.sh.
 rule_personal_identifiers() { # ID-401
   [ "$#" -eq 0 ] && return 0
-  local candidate
+  local candidate keep=""
+  for candidate in "$@"; do
+    _protocol_is_attribution "$candidate" || keep="$keep $candidate"
+  done
+  # shellcheck disable=SC2086
+  set -- $keep
+  [ "$#" -eq 0 ] && return 0
   for candidate in \
     "${PROTOCOL_SCREEN:-}" \
     "$HOME/.agents/lib/personal-identifiers.sh" \
@@ -278,6 +311,116 @@ rule_personal_identifiers() { # ID-401
   _protocol_fail "ID-401" "Personal or third-party identifier in staged content."
 }
 
+# Generic leak rules. Unlike ID-401 these name no individual, so they can ship
+# in a public repository and protect a machine that has no local screen.
+
+# RFC1918 and link-local. Public addresses are not flagged: a documentation
+# example or a DNS root server is not a disclosure, and flagging every dotted
+# quad trains you to ignore the rule.
+PROTOCOL_PRIVATE_IP_RE='(^|[^0-9.])(192\.168\.[0-9]{1,3}\.[0-9]{1,3}|10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3}|169\.254\.[0-9]{1,3}\.[0-9]{1,3})([^0-9]|$)'
+
+rule_no_private_ips() { # ID-402
+  [ "$#" -eq 0 ] && return 0
+  local hits
+  hits=$(grep -lE "$PROTOCOL_PRIVATE_IP_RE" "$@" 2>/dev/null || true)
+  [ -z "$hits" ] && return 0
+  _protocol_fail "ID-402" "Private network address in: $(echo "$hits" | tr '\n' ' ')" \
+    "Use a hostname such as db.example.com, or describe the range in words."
+}
+
+# A home directory path leaks the account name and the machine's layout, and it
+# is never portable, so it is a defect on its own terms.
+PROTOCOL_LOCAL_PATH_RE='(/Users/[A-Za-z0-9._-]+|/home/[A-Za-z0-9._-]+|C:\\\\Users\\\\[A-Za-z0-9._-]+)'
+
+rule_no_local_paths() { # ID-403
+  [ "$#" -eq 0 ] && return 0
+  local f hits found=""
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    # A generic example path names nobody.
+    hits=$(grep -nE "$PROTOCOL_LOCAL_PATH_RE" "$f" 2>/dev/null \
+           | grep -vE '/(Users|home)/(you|user|username|me|example|<[a-z]+>)' | head -3 || true)
+    [ -n "$hits" ] && found="$found$f: $hits
+"
+  done
+  [ -z "$found" ] && return 0
+  _protocol_fail "ID-403" "Local filesystem path:
+$found" "Write \$HOME or ~ instead."
+}
+
+PROTOCOL_PERSONAL_EMAIL_RE='[A-Za-z0-9._%+-]+@(gmail|googlemail|outlook|hotmail|live|yahoo|icloud|me|proton|protonmail|pm)\.[a-z.]{2,}'
+
+rule_no_personal_email() { # ID-404
+  [ "$#" -eq 0 ] && return 0
+  local f hits found=""
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    _protocol_is_attribution "$f" && continue
+    hits=$(grep -nEi "$PROTOCOL_PERSONAL_EMAIL_RE" "$f" 2>/dev/null \
+           | grep -vEi '(you|user|username|someone|example|name)@' | head -3 || true)
+    [ -n "$hits" ] && found="$found$f: $hits
+"
+  done
+  [ -z "$found" ] && return 0
+  _protocol_fail "ID-404" "Personal email address:
+$found" "Commit under the noreply address only."
+}
+
+# Agent harnesses append a session identifier to commit messages and pull
+# request bodies by default. That URL points at a private transcript. It is the
+# single most common way a private link reaches a public repository, and it
+# arrives without anyone deciding to put it there.
+PROTOCOL_SESSION_RE='(claude\.ai/code/session[_-][A-Za-z0-9]|chatgpt\.com/(c|share)/[A-Za-z0-9]|Claude-Session:[[:space:]]*http|Generated with \[?(Claude|Codex|Copilot|Cursor)|Co-Authored-By:[[:space:]]*(Claude|Codex|Copilot|Cursor))'
+
+rule_no_session_links() { # ID-405
+  local text="$1"
+  printf '%s' "$text" | grep -qiE "$PROTOCOL_SESSION_RE" || return 0
+  _protocol_fail "ID-405" "Agent session link or AI attribution." \
+    "Commits and pull requests carry a single human author and no transcript link."
+}
+
+rule_no_session_links_in_files() { # ID-405
+  [ "$#" -eq 0 ] && return 0
+  local f keep=""
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    _protocol_is_attribution "$f" && continue
+    keep="$keep $f"
+  done
+  [ -z "$keep" ] && return 0
+  local hits
+  # shellcheck disable=SC2086
+  hits=$(grep -lEi "$PROTOCOL_SESSION_RE" $keep 2>/dev/null || true)
+  [ -z "$hits" ] && return 0
+  _protocol_fail "ID-405" "Agent session link in: $(echo "$hits" | tr '\n' ' ')"
+}
+
+# Text an agent publishes to GitHub. This is the most public surface in the
+# workflow and had no rule attached to it.
+#
+# Unlike every other command rule, this one reads the RAW command, heredocs
+# included, because a body is routinely supplied on standard input. It is
+# looking for what the text CONTAINS, not for what the command RUNS -- so a body
+# quoting a prohibited command stays allowed, which is the distinction #3
+# established and this must not undo.
+rule_gh_published_text() { # ID-406
+  local raw="$1"
+  _protocol_invocations "$raw" '^gh[[:space:]]+(pr|issue|release|gist)[[:space:]]+(create|edit|comment)' >/dev/null || return 0
+
+  local what=""
+  printf '%s' "$raw" | grep -qiE "$PROTOCOL_SESSION_RE"        && what="$what session-link"
+  printf '%s' "$raw" | grep -qEi "$PROTOCOL_PERSONAL_EMAIL_RE" && what="$what personal-email"
+  printf '%s' "$raw" | grep -qE  "$PROTOCOL_PRIVATE_IP_RE"     && what="$what private-ip"
+  printf '%s' "$raw" | grep -qE  "$PROTOCOL_LOCAL_PATH_RE" \
+    && ! printf '%s' "$raw" | grep -qE '/(Users|home)/(you|user|username|me|example)' \
+    && what="$what local-path"
+  printf '%s' "$raw" | grep -qE  "$PROTOCOL_SECRET_RE"         && what="$what secret"
+
+  [ -z "$what" ] && return 0
+  _protocol_fail "ID-406" "Publishing to GitHub with:$what" \
+    "Anything posted to a public repo is copied beyond recall. Remove it from the body."
+}
+
 # --- commit format ----------------------------------------------------------
 
 PROTOCOL_COMMIT_TYPES='feat|fix|refactor|docs|test|chore|ci|security|audit|session|perf|build|style|revert'
@@ -293,6 +436,10 @@ rule_conventional_subject() { # ID-301
 rule_subject_length() { # ID-302
   local subject="$1"
   [ "${#subject}" -le 72 ] && return 0
+  # Merge and revert subjects are generated by git, and CI hosts fabricate
+  # their own ("Merge <sha> into <sha>") to test a PR. Their length is not the
+  # author's choice, so holding an author to it fails builds for no reason.
+  echo "$subject" | grep -qE '^(Merge|Revert) ' && return 0
   _protocol_fail "ID-302" "Subject is ${#subject} chars, limit is 72."
 }
 
@@ -317,6 +464,7 @@ protocol_check_cmd() {
   rule_gh_requires_repo "$cmd"
   rule_never_merge "$cmd"
   rule_upstream_protection "$cmd"
+  rule_gh_published_text "$cmd"
 
   rule_no_coauthor "$cmd"
   rule_no_ai_attribution "$cmd"
@@ -341,6 +489,7 @@ protocol_check_msg() {
   rule_no_emoji "$text"
   rule_no_coauthor_text "$text"
   rule_no_ai_attribution_text "$text"
+  rule_no_session_links "$text"
 
   return "$PROTOCOL_VIOLATIONS"
 }
@@ -364,6 +513,14 @@ protocol_check_staged() {
     rule_no_secrets_in_files $existing
     # shellcheck disable=SC2086
     rule_personal_identifiers $existing
+    # shellcheck disable=SC2086
+    rule_no_private_ips $existing
+    # shellcheck disable=SC2086
+    rule_no_local_paths $existing
+    # shellcheck disable=SC2086
+    rule_no_personal_email $existing
+    # shellcheck disable=SC2086
+    rule_no_session_links_in_files $existing
   fi
   rule_gitleaks_staged
 

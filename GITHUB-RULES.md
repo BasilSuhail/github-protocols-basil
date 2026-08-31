@@ -1,11 +1,11 @@
 ---
 name: github-rules
-description: Complete GitHub workflow rules for Basil Suhail — feed this file into any agentic coding tool (Claude Code, Codex CLI/app, OpenCode, Cursor, Gemini CLI, Windsurf, Continue.dev) to enforce universal git hygiene
+description: Complete GitHub workflow rules — feed this file into any agentic coding tool (Claude Code, Codex CLI/app, OpenCode, Cursor, Gemini CLI, Windsurf, Continue.dev) to enforce universal git hygiene
 paths: ["**"]
 alwaysApply: true
 ---
 
-# GitHub Rules — Basil Suhail
+# GitHub Rules
 
 > Feed this file into any agentic coding tool as AGENTS.md, CLAUDE.md, .cursorrules, GEMINI.md, or equivalent.
 > All rules are non-negotiable unless explicitly overridden by the user in conversation.
@@ -18,8 +18,8 @@ alwaysApply: true
 
 | Field | Value |
 |-------|-------|
-| Name | `Basil Suhail` |
-| Email | `BasilSuhail@users.noreply.github.com` |
+| Name | from `~/.agents/protocol.conf` |
+| Email | `<handle>@users.noreply.github.com` |
 | GitHub | `BasilSuhail` |
 
 ### Absolute Prohibitions
@@ -35,7 +35,7 @@ Before your first commit in any session or repo, verify:
 ```bash
 git config user.email
 # Must return: *@users.noreply.github.com
-# If not: git config user.email "BasilSuhail@users.noreply.github.com"
+# If not: git config user.email "<handle>@users.noreply.github.com"
 ```
 
 ---
@@ -228,9 +228,30 @@ the author turns off.
 | ID-301 | Subject must be a Conventional Commit |
 | ID-302 | Subject at most 72 characters |
 | ID-303 | No emoji in commit messages |
+| ID-405 | No agent session links or AI attribution |
+| ID-406 | Text published to GitHub is scanned for leaks |
 
 Every rule blocks. There are no advisory rules — an agent reads a warning and
 proceeds anyway, which is indistinguishable from having no rule.
+
+### Server-side enforcement
+
+Every layer above lives on one machine. Hooks can be stale, uninstalled, or
+absent on a second laptop, and they share a filesystem with the agent they
+constrain. The ruleset on `main` is the one layer that is not negotiable from
+inside a session:
+
+| Rule | Effect |
+|------|--------|
+| Pull request required | No direct pushes to `main`, by anyone or anything |
+| Non-fast-forward blocked | Force pushes rejected at the remote |
+| Deletion blocked | `main` cannot be deleted |
+| Required status checks | `rule engine`, `leak scan`, `commit messages` must pass |
+
+Apply it with `bash scripts/apply-github-ruleset.sh` (needs admin). The CI
+workflow in `.github/workflows/protocol.yml` runs the same rule engine as the
+local hooks, so a machine with no hooks installed still cannot merge a
+violation.
 
 ### Overrides
 

@@ -201,6 +201,12 @@ in three.
 Claude Code does **not** set `CLAUDE_TOOL_NAME` or `CLAUDE_TOOL_INPUT`. Any hook
 reading those env vars silently enforces nothing.
 
+Rules judge what a command **invokes**, not text it carries. A pull-request body
+or a test fixture that quotes a prohibited command is documentation, not an
+action. The engine drops heredoc bodies, splits on shell separators and matches
+only real invocation segments, because a guard that fires on prose is a guard
+the author turns off.
+
 ### Rule IDs
 
 | ID | Rule |

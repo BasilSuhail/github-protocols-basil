@@ -65,6 +65,53 @@ _protocol_fail() {
   return 1
 }
 
+# --- command decomposition --------------------------------------------------
+
+# A rule must judge what a command RUNS, not text the command happens to carry.
+# `gh pr create --body "...<a force push example>..."` documents a force push;
+# it does not perform one. Matching the raw string flagged prose, tests and PR
+# bodies alike, and a guard that fires on documentation gets disabled by the
+# person it stops.
+#
+# So: drop heredoc bodies, split on shell separators, strip leading env
+# assignments and wrappers, and keep the segments that actually invoke something.
+
+_protocol_strip_heredocs() {
+  printf '%s\n' "$1" | awk '
+    {
+      line = $0
+      if (skip) {
+        t = line; sub(/^[[:space:]]+/, "", t)
+        if (t == term) skip = 0
+        next
+      }
+      if (match(line, /<<-?[[:space:]]*["\x27]?[A-Za-z_][A-Za-z0-9_]*["\x27]?/)) {
+        term = substr(line, RSTART, RLENGTH)
+        sub(/^<<-?[[:space:]]*/, "", term)
+        gsub(/["\x27]/, "", term)
+        skip = 1
+      }
+      print line
+    }'
+}
+
+# _protocol_segments <command> -> one invocation per line, payloads removed
+_protocol_segments() {
+  _protocol_strip_heredocs "$1" \
+    | tr ';|&\n' '\n\n\n\n' \
+    | sed -e 's/^[[:space:]]*//' -e 's/^\$[[:space:]]*//' \
+    | sed -e 's/^\([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]*\)*//' \
+    | sed -e 's/^\(sudo\|command\|nohup\)[[:space:]]*//'
+}
+
+# _protocol_invocations <command> <regex> -> matching segments, or 1 if none
+_protocol_invocations() {
+  local found
+  found=$(_protocol_segments "$1" | grep -E "$2" || true)
+  [ -z "$found" ] && return 1
+  printf '%s\n' "$found"
+}
+
 # --- identity ---------------------------------------------------------------
 
 rule_noreply_email() { # ID-001
@@ -82,51 +129,81 @@ rule_noreply_email() { # ID-001
   esac
 }
 
+# Scoped to git commit/push invocations. Scanning every command string flagged
+# any command that merely contained the phrase, this rule engine included.
 rule_no_coauthor() { # ID-002
-  echo "$1" | grep -qi 'co-authored-by' || return 0
+  local segs
+  segs=$(_protocol_invocations "$1" '^git[[:space:]]+(commit|push)') || return 0
+  printf '%s' "$segs" | grep -qi 'co-authored-by' || return 0
   _protocol_fail "ID-002" "Co-Authored-By trailer is prohibited. Single author only."
 }
 
 rule_no_ai_attribution() { # ID-003
-  echo "$1" | grep -qiE 'noreply@anthropic\.com|generated with \[?claude|co-authored-by: *(claude|codex|copilot|cursor)' || return 0
+  local segs
+  segs=$(_protocol_invocations "$1" '^git[[:space:]]+(commit|push)') || return 0
+  printf '%s' "$segs" | grep -qiE 'noreply@anthropic\.com|generated with \[?claude|co-authored-by: *(claude|codex|copilot|cursor)' || return 0
+  _protocol_fail "ID-003" "AI attribution detected. Commits carry a single human author."
+}
+
+# Text variants. A commit message is content, so it is scanned whole; a shell
+# command is an invocation, so only its git segments are. Same rule ID, two
+# contexts -- the message layer is what catches a trailer added by an editor,
+# a template, or a HEREDOC the command layer never sees.
+rule_no_coauthor_text() { # ID-002
+  printf '%s' "$1" | grep -qi 'co-authored-by' || return 0
+  _protocol_fail "ID-002" "Co-Authored-By trailer is prohibited. Single author only."
+}
+
+rule_no_ai_attribution_text() { # ID-003
+  printf '%s' "$1" | grep -qiE 'noreply@anthropic\.com|generated with \[?claude|co-authored-by: *(claude|codex|copilot|cursor)' || return 0
   _protocol_fail "ID-003" "AI attribution detected. Commits carry a single human author."
 }
 
 # --- safety -----------------------------------------------------------------
 
 rule_no_verify_bypass() { # ID-101
-  echo "$1" | grep -qE -- '--no-verify|--no-gpg-sign' || return 0
+  local segs
+  segs=$(_protocol_invocations "$1" '^git[[:space:]]') || return 0
+  printf '%s' "$segs" | grep -qE -- '--no-verify|--no-gpg-sign' || return 0
   _protocol_fail "ID-101" "Hook bypass flag detected. Fix the underlying violation instead."
 }
 
 rule_no_force_push() { # ID-102
-  echo "$1" | grep -qE 'git[[:space:]]+push' || return 0
-  echo "$1" | grep -qE -- '(--force([^-]|$)|--force-with-lease|[[:space:]]-f([[:space:]]|$))' || return 0
+  local segs
+  segs=$(_protocol_invocations "$1" '^git[[:space:]]+push') || return 0
+  printf '%s' "$segs" | grep -qE -- '(--force([^-]|$)|--force-with-lease|[[:space:]]-f([[:space:]]|$))' || return 0
   _protocol_fail "ID-102" "Force push is prohibited."
 }
 
 rule_no_blanket_add() { # ID-103
-  echo "$1" | grep -qE 'git[[:space:]]+add[[:space:]]+(-A([[:space:]]|$)|--all|\.([[:space:]]|$))' || return 0
+  _protocol_invocations "$1" '^git[[:space:]]+add[[:space:]]+(-A([[:space:]]|$)|--all|\.([[:space:]]|$))' >/dev/null || return 0
   _protocol_fail "ID-103" "Blanket staging is prohibited — it sweeps in .env, keys, and binaries." \
     "Stage explicit paths: git add path/to/file"
 }
 
 rule_no_destructive_git() { # ID-104
-  echo "$1" | grep -qE 'git[[:space:]]+(reset[[:space:]]+--hard|clean[[:space:]]+-[a-z]*f)' || return 0
+  _protocol_invocations "$1" '^git[[:space:]]+(reset[[:space:]]+--hard|clean[[:space:]]+-[a-z]*f)' >/dev/null || return 0
   _protocol_fail "ID-104" "Destructive git command requires explicit human approval."
 }
 
+# Called with a command (cmd context) or a bare remote URL (pre-push context).
 rule_upstream_protection() { # ID-105
-  local target="$1"
-  echo "$target" | grep -qiE 'github\.com|--repo|git@' || return 0
-  echo "$target" | grep -qi "$PROTOCOL_OWNER" && return 0
+  local target="$1" segs
+  if printf '%s' "$target" | grep -qE '^(https?://|git@|ssh://)'; then
+    segs="$target"
+  else
+    segs=$(_protocol_invocations "$target" '^(git|gh)[[:space:]]') || return 0
+  fi
+  printf '%s' "$segs" | grep -qiE 'github\.com[:/]|--repo[= ]|git@' || return 0
+  printf '%s' "$segs" | grep -qi "$PROTOCOL_OWNER" && return 0
   _protocol_fail "ID-105" "Target does not name $PROTOCOL_OWNER — refusing to touch a non-owned repo." \
     "Use $PROTOCOL_OWNER forks only."
 }
 
 rule_gh_requires_repo() { # ID-106
-  echo "$1" | grep -qE 'gh[[:space:]]+(pr|issue|release)[[:space:]]+(create|edit|merge|close|comment)' || return 0
-  echo "$1" | grep -q -- '--repo' && return 0
+  local segs
+  segs=$(_protocol_invocations "$1" '^gh[[:space:]]+(pr|issue|release)[[:space:]]+(create|edit|merge|close|comment)') || return 0
+  printf '%s' "$segs" | grep -q -- '--repo' && return 0
   _protocol_fail "ID-106" "gh write command without --repo. Default remote detection causes upstream leaks." \
     "Add --repo $PROTOCOL_OWNER/<repo>"
 }
@@ -142,7 +219,7 @@ rule_no_direct_main() { # ID-107
 }
 
 rule_never_merge() { # ID-108
-  echo "$1" | grep -qE 'gh[[:space:]]+pr[[:space:]]+merge' || return 0
+  _protocol_invocations "$1" '^gh[[:space:]]+pr[[:space:]]+merge' >/dev/null || return 0
   _protocol_fail "ID-108" "Agents never merge pull requests. $PROTOCOL_OWNER merges."
 }
 
@@ -241,9 +318,9 @@ protocol_check_cmd() {
   rule_never_merge "$cmd"
   rule_upstream_protection "$cmd"
 
-  if echo "$cmd" | grep -qE 'git[[:space:]]+(commit|push)'; then
-    rule_no_coauthor "$cmd"
-    rule_no_ai_attribution "$cmd"
+  rule_no_coauthor "$cmd"
+  rule_no_ai_attribution "$cmd"
+  if _protocol_invocations "$cmd" '^git[[:space:]]+(commit|push)' >/dev/null; then
     rule_noreply_email
   fi
 
@@ -262,8 +339,8 @@ protocol_check_msg() {
   rule_conventional_subject "$subject"
   rule_subject_length "$subject"
   rule_no_emoji "$text"
-  rule_no_coauthor "$text"
-  rule_no_ai_attribution "$text"
+  rule_no_coauthor_text "$text"
+  rule_no_ai_attribution_text "$text"
 
   return "$PROTOCOL_VIOLATIONS"
 }

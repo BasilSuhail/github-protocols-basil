@@ -68,6 +68,19 @@ expect_cmd 0 "allows gh with --repo"        'gh issue create --repo BasilSuhail/
 expect_cmd 0 "allows unrelated command"     'ls -la'
 echo ""
 
+echo "Payloads are data, not invocations (regression):"
+expect_cmd 0 "allows a force push quoted in a PR body" \
+  "gh pr create --repo BasilSuhail/x --title y --body 'run: git push --force origin main'"
+expect_cmd 0 "allows a trailer quoted in a PR body" \
+  "gh pr create --repo BasilSuhail/x --title y --body 'never write Co-Authored-By: Someone'"
+expect_cmd 0 "allows reading a file that documents the rules" \
+  'cat GITHUB-RULES.md'
+expect_cmd 0 "allows a heredoc body naming a blocked command" \
+  "$(printf 'cat <<%s\ngit push --force origin main\nEOF' "EOF")"
+expect_cmd 2 "still blocks a real force push after a safe one" \
+  'git status && git push --force origin main'
+echo ""
+
 echo "Claude Code adapter (non-Bash and malformed payloads):"
 echo '{"tool_name":"Read","tool_input":{"file_path":"/x"}}' | clean_env bash "$PTU" >/dev/null 2>&1 \
   && ok "ignores non-Bash tools" || bad "ignores non-Bash tools"

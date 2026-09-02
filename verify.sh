@@ -303,9 +303,9 @@ if machine_only; then
 echo "Global config is deduplicated:"
 S="$HOME/.claude/settings.json"
 if grep -qE 'CAVEMAN|1:1:1 PROTOCOL' "$S" 2>/dev/null; then
-  bad "no hand-rolled style hooks (the caveman plugin owns response style)"
+  bad "no hand-rolled style hooks (the vendored caveman skill owns response style)"
 else
-  ok "no hand-rolled style hooks (the caveman plugin owns response style)"
+  ok "no hand-rolled style hooks (the vendored caveman skill owns response style)"
 fi
 if grep -q 'any-buddy' "$S" 2>/dev/null; then
   bad "no SessionStart hook pointing at an uninstalled binary"

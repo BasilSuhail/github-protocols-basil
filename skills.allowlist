@@ -1,12 +1,18 @@
-# Skills kept in ~/.claude/skills/. One name per line; # starts a comment.
+# Skills kept in the global Claude skills directory. One name per line;
+# # starts a comment.
 #
-# install.sh moves anything here that is not listed to ~/.claude/skills-archive/.
-# Moved, never deleted: several skills have no upstream recorded anywhere on
-# disk, so a delete would be irreversible.
+# install.sh moves anything here that is not listed to skills-archive/ beside
+# it. Moved, never deleted: several skills have no upstream recorded anywhere
+# on disk, so a delete would be irreversible.
 #
-# This file only governs ~/.claude/skills/. Plugin skills cannot be removed
-# individually -- `claude plugin disable` takes a plugin, not a skill, and
-# edits to the plugin cache are wiped on update. caveman and superpowers are
-# all-or-nothing, and both are kept.
+# This file only governs skills installed from this repo. Plugin skills cannot
+# be removed individually -- `claude plugin disable` takes a plugin, not a
+# skill, and edits to the plugin cache are wiped on update. superpowers is
+# all-or-nothing and is kept.
+#
+# caveman used to be one of those plugins. It is now vendored here as a skill,
+# because the plugin was removed from this machine and took the response style
+# documented in CLAUDE.md with it. See NOTICE for the upstream revision.
 
+caveman
 karpathy-guidelines

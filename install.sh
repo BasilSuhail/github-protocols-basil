@@ -173,8 +173,8 @@ if [ -d "$HOME/.claude" ]; then
     cp "$SETTINGS" "$SETTINGS.bak.$(date +%Y%m%d%H%M%S)"
     tmp=$(mktemp)
     # Two UserPromptSubmit hooks restate what other layers already own. The
-    # caveman plugin's own mode tracker sets the response style, and a hardcoded
-    # override fights it every prompt -- which is why the level never sticks.
+    # vendored caveman skill sets the response style, and a hardcoded override
+    # fights it every prompt -- which is why the level never sticks.
     # The 1:1:1 reminder existed because nothing enforced it; ID-107 and ID-108
     # now block direct commits to main and gh pr merge outright.
     jq '

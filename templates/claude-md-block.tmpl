@@ -11,5 +11,6 @@ command and only from a human shell.
 - 1 issue → 1 branch → 1 PR. Agents open PRs and never merge; @OWNER@ merges.
 - Identity comes from `~/.agents/protocol.conf`. Never hardcode a name or
   address in a tracked file.
-- Response style is owned by the caveman plugin. Change it with
-  `/caveman lite|full|ultra`, not by adding a hook.
+- Response style comes from the vendored `caveman` skill, not a plugin. Change
+  it with `/caveman lite|full|ultra`, not by adding a hook. install.sh deploys
+  it; a plugin could be uninstalled without this repo noticing.

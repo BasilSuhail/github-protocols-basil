@@ -21,6 +21,32 @@ Vendored:  2026-08-31
 The guidelines are derived from Andrej Karpathy's public observations on LLM
 coding pitfalls, linked from within the skill itself.
 
+--------------------------------------------------------------------------
+skills/caveman/SKILL.md
+--------------------------------------------------------------------------
+
+Upstream:  https://github.com/JuliusBrussee/caveman
+Author:    Julius Brussee
+Licence:   MIT (Copyright (c) 2026 Julius Brussee)
+Revision:  3b74643f4d910f496babd4e634b1ba7168816f14
+Vendored:  2026-09-02
+
+Upstream splits its licence per directory and says so in LICENSING.md. The
+skill surface, skills/, is MIT and is the only part copied here. The
+compression engine and the Go binaries that embed it -- engine/, proxy/,
+rewriter/, browse/, mcp/, shrink/, the cavemem Go core and shared/platform/ --
+are Business Source License 1.1, which requires a commercial licence to offer
+the functionality to third parties as a hosted or embedded service.
+
+None of that is vendored. This repository takes the one file that owns response
+style and nothing that is engine-linked, so no BSL-1.1 obligation attaches.
+
+Only SKILL.md is copied. Upstream's own commands, plugin manifest and Go
+tooling are not, so `/caveman` here is a skill invocation rather than the
+upstream slash command.
+
+--------------------------------------------------------------------------
+
 Copies are byte-for-byte. They are not edited to fit this repository's house
 style: a vendored file that quietly diverges from upstream is harder to trust
 than one that is either identical or openly forked. Check for drift with:

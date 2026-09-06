@@ -314,10 +314,11 @@ rule_personal_identifiers() { # ID-401
 # Generic leak rules. Unlike ID-401 these name no individual, so they can ship
 # in a public repository and protect a machine that has no local screen.
 
-# RFC1918 and link-local. Public addresses are not flagged: a documentation
-# example or a DNS root server is not a disclosure, and flagging every dotted
-# quad trains you to ignore the rule.
-PROTOCOL_PRIVATE_IP_RE='(^|[^0-9.])(192\.168\.[0-9]{1,3}\.[0-9]{1,3}|10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3}|169\.254\.[0-9]{1,3}\.[0-9]{1,3})([^0-9]|$)'
+# RFC1918, link-local, and CGNAT (100.64.0.0/10 — used by Tailscale for stable
+# device addresses). Public addresses are not flagged: a documentation example
+# or a DNS root server is not a disclosure, and flagging every dotted quad
+# trains you to ignore the rule.
+PROTOCOL_PRIVATE_IP_RE='(^|[^0-9.])(192\.168\.[0-9]{1,3}\.[0-9]{1,3}|10\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]{1,3}\.[0-9]{1,3}|169\.254\.[0-9]{1,3}\.[0-9]{1,3}|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.[0-9]{1,3}\.[0-9]{1,3})([^0-9]|$)'
 
 rule_no_private_ips() { # ID-402
   [ "$#" -eq 0 ] && return 0
@@ -364,6 +365,20 @@ rule_no_personal_email() { # ID-404
   [ -z "$found" ] && return 0
   _protocol_fail "ID-404" "Personal email address:
 $found" "Commit under the noreply address only."
+}
+
+# Tailscale tailnet identifiers. The MagicDNS suffix (taild*.ts.net) is a
+# stable, guessable handle for the entire network; combined with Funnel it
+# gives a stranger a live URL to probe. Placeholder: <tailnet>.ts.net.
+PROTOCOL_TAILNET_RE='taild[a-f0-9]+\.ts\.net'
+
+rule_no_tailnet_ids() { # ID-407
+  [ "$#" -eq 0 ] && return 0
+  local hits
+  hits=$(grep -lE "$PROTOCOL_TAILNET_RE" "$@" 2>/dev/null || true)
+  [ -z "$hits" ] && return 0
+  _protocol_fail "ID-407" "Tailnet identifier in: $(echo "$hits" | tr '\n' ' ')" \
+    "Replace with <tailnet>.ts.net or read the name from an env var at runtime."
 }
 
 # Agent harnesses append a session identifier to commit messages and pull
@@ -524,6 +539,8 @@ protocol_check_staged() {
     rule_no_local_paths $existing
     # shellcheck disable=SC2086
     rule_no_personal_email $existing
+    # shellcheck disable=SC2086
+    rule_no_tailnet_ids $existing
     # shellcheck disable=SC2086
     rule_no_session_links_in_files $existing
   fi

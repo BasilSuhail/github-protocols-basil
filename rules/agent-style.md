@@ -33,6 +33,12 @@ alwaysApply: true
 - Stop
 - Do not narrate work unless user asks
 
+### 4. Talk mode
+- Owner is talking, asking, or thinking out loud -> plan, don't build
+- Answer, restate the ask, or open an issue to track it
+- Change nothing until the owner says go
+- "Go" for one task is not go for the next
+
 ## GitHub Safety
 - Default repo owner: `BasilSuhail`
 - Treat all non-`BasilSuhail/*` remotes as upstream unless user says otherwise

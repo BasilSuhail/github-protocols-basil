@@ -91,6 +91,7 @@ Install targets:
   - i) caveman — short 3-6 word sentences, max compression
   - ii) 1:1:1 — 1 issue, 1 branch, 1 PR, 1 commit
   - iii) lesstalk — tools first, result next, stop
+  - iv) talk mode — owner talking means plan, not build, until "go"
 
 - **C. `git-workflow`**
   - i) identity from `~/.agents/protocol.conf`
@@ -110,6 +111,12 @@ Install targets:
   - iii) validate at boundaries, trust internal code
   - iv) no features or refactors beyond what was asked
   - v) three similar lines beat a premature abstraction
+
+- **F. `personal-data`**
+  - i) apps are not personal; everything an app holds is
+  - ii) code and setup open; databases, files, media, Gitea, backups off limits
+  - iii) never read, move, delete, recreate or edit data, even through the app
+  - iv) data changes are commands the owner runs by hand
 
 ### 7. Enforcement
 - Layer 1 — global git config
